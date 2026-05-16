@@ -233,18 +233,6 @@ export function FullGbrainGraph({ nodes, edges }: Props) {
           linkColor={() => 'rgba(120,120,140,0.35)'}
           linkWidth={0.6}
           linkOpacity={0.5}
-          linkDirectionalParticles={2}
-          linkDirectionalParticleWidth={1.4}
-          linkDirectionalParticleSpeed={0.006}
-          linkDirectionalParticleColor={(l: unknown) => {
-            const link = l as GLink;
-            const targetId =
-              typeof link.target === 'string'
-                ? link.target
-                : (link.target as { id?: string })?.id ?? '';
-            const node = data.nodes.find((n) => n.id === targetId);
-            return node?.color ?? '#10b981';
-          }}
           enableNodeDrag
           onNodeHover={(n: unknown) => setHovered((n as GNode | null) ?? null)}
           onNodeClick={(n: unknown) => {
