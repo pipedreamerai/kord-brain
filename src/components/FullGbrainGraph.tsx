@@ -266,10 +266,10 @@ export function FullGbrainGraph({ nodes, edges }: Props) {
         />
       )}
 
-      <div className="pointer-events-none absolute bottom-2 left-2 text-[10px] font-mono text-zinc-500 flex flex-col gap-0.5">
+      <div className="pointer-events-none absolute bottom-2 left-2 flex flex-col gap-0.5 rounded border border-zinc-800 bg-zinc-950/80 px-2 py-1 text-[10px] font-mono text-zinc-300">
         <div className="flex items-center gap-1.5">
           <span className="inline-block w-2 h-2 rounded-full" style={{ background: COLORS.document }} />
-          <span>document</span>
+          <span>file</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="inline-block w-2 h-2 rounded-full" style={{ background: COLORS.tag }} />
@@ -277,12 +277,8 @@ export function FullGbrainGraph({ nodes, edges }: Props) {
         </div>
         <div className="flex items-center gap-1.5">
           <span className="inline-block w-2 h-2 rounded-full" style={{ background: COLORS.root }} />
-          <span>root</span>
+          <span>brain</span>
         </div>
-      </div>
-
-      <div className="pointer-events-none absolute bottom-2 right-2 text-[10px] font-mono text-zinc-600">
-        drag · scroll · click
       </div>
 
       {hovered && (
