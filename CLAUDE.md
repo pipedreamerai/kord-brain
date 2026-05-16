@@ -1,9 +1,11 @@
 # Cross-Doc Engineering Reasoning Demo — Hackathon Plan
 
-**Team:** Chris (P&ID / process engineering), Wenny (software)
+**Team:** Chris (P&ID / process engineering + frontend)
 **Stack:** gstack + gbrain
 **Time:** 12-hour hackathon (2026-05-16)
 **Working backwards from:** a 5-minute live demo where Chris starts from an already-understood engineering document set, adds a small prepared design packet plus a plain-English intent, and gbrain visibly updates its knowledge model — then answers questions against the updated system with synchronized document highlights.
+
+> **Status (updated 2026-05-16):** Real baseline engineering documents are in `samples/`. Phase 1 scaffold (viewers, ingestion, tag index, walkthrough streaming) is complete. Chris is now building the frontend.
 
 ---
 
@@ -105,7 +107,9 @@ Reasoning:
 
 ---
 
-## 3. The sample file set (Chris's first task, blocking everything else)
+## 3. The sample file set
+
+> **DONE:** Baseline documents are in `samples/` and are the real files for the demo. Tag schema is locked.
 
 Build a coherent **fake hydrogen feedwater subsystem** — not EH2's real one. The baseline system is a single skid with one motor, one pump, one control loop, one tank, and two interlocks. The update packet adds a small redundant pump train. Keep everything small enough to fit on one page per document.
 
@@ -210,40 +214,32 @@ For PDFs, extract bboxes via `pdfplumber` or PyMuPDF text search. For drawings, 
 
 ## 5. Work split
 
-### Chris (domain — critical path, no Claude Code speedup on drawings)
+### Completed (Phase 1 scaffold)
 
+| Task                                                     | Status |
+| -------------------------------------------------------- | ------ |
+| Lock baseline + update packet tag schema                 | Done   |
+| Baseline P&ID + electrical drawings                      | Done   |
+| Baseline equipment list, narrative, and spec             | Done   |
+| Hand-annotate baseline drawing bboxes                    | Done   |
+| Repo scaffold, Next.js + PDF.js/docx/xlsx viewers        | Done   |
+| Ingestion: pdf bbox loading, docx → HTML, xlsx → json    | Done   |
+| Tag index builder (tag locations across all doc types)    | Done   |
+| gbrain walkthrough prompt + streaming endpoint           | Done   |
+| Multi-doc tab switching with highlights                   | Done   |
 
-| Priority | Task                                                      | Output                       |
-| -------- | --------------------------------------------------------- | ---------------------------- |
-| P0       | Lock baseline + update packet tag schema                  | Approved schema              |
-| P0       | Draw baseline P&ID + electrical                           | `pid.pdf`, `electrical.pdf`  |
-| P0       | Fill baseline equipment list, narrative, and spec         | xlsx, two docx               |
-| P0       | Draw prepared redundant-pump update packet                | update pdf/docx/xlsx files   |
-| P0       | Hand-annotate baseline and update drawing bboxes          | `bboxes.json`, update bboxes |
-| P0       | Write `EXPECTED_INGESTION.md` and `EXPECTED_QA.md`        | Eval ground truth            |
-| P1       | Walk through gbrain discoveries, flag unsupported claims  | Issue list for Wenny         |
-| P1       | Prepare 2-3 live questions about the updated design       | Demo Q&A script              |
-| P2       | Sanity-check stretch scenario for duty/standby autoswitch | Validated change list        |
-
-
-### Wenny (software — Claude Code accelerated)
-
+### Chris (frontend + domain — Claude Code accelerated)
 
 | Priority | Task                                                     | Output                             |
 | -------- | -------------------------------------------------------- | ---------------------------------- |
-| P0       | Repo scaffold, Next.js + PDF.js/docx/xlsx viewers        | Renders baseline docs              |
-| P0       | Ingestion: pdf text extraction, docx → HTML, xlsx → json | Baseline + update packet artifacts |
-| P0       | Tag/relationship graph builder                           | Tag locations + relationship edges |
+| P0       | Knowledge update panel + ingestion timeline              | End-to-end update proof            |
 | P0       | Prepared "add design packet" flow                        | Loads update files + description   |
-| P0       | gbrain update prompt + structured endpoint               | Ingestion steps + graph/tag deltas |
-| P0       | Knowledge update panel + highlight wiring                | End-to-end update proof            |
-| P1       | Q&A endpoint with citations/highlights                   | Chris can ask about updated design |
-| P1       | Multi-doc tab switching with auto-scroll on highlight    | Cross-doc viewport                 |
+| P0       | Draw prepared redundant-pump update packet               | update pdf/docx/xlsx files         |
+| P0       | Write `EXPECTED_INGESTION.md` and `EXPECTED_QA.md`       | Eval ground truth                  |
+| P1       | Q&A endpoint with citations/highlights                   | Ask questions about updated design |
+| P1       | Auto-scroll on highlight across docs                     | Cross-doc viewport                 |
 | P1       | Animation polish for timeline and graph deltas           | Demo feels good                    |
 | P2       | Stretch: next design check / duty-standby mode           | Optional second flow               |
-
-
-**Sync points:** check in every 2 hours. Chris's bbox files, expected ingestion discoveries, and Wenny's graph delta schema need to interface — agree on JSON shape in Hour 0.
 
 ---
 
