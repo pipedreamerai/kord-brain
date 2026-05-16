@@ -38,6 +38,7 @@ yarn-error.log*
 
 # claude worktrees (created by wt.sh)
 .claude/worktrees/
+.claude/settings.local.json
 .worktree-port
 
 # typescript
