@@ -11,7 +11,6 @@ export function GraphTab() {
   return (
     <div className="flex flex-col h-full p-6 bg-zinc-950">
       <div className="flex items-center gap-3 mb-4">
-        <h2 className="text-sm font-semibold text-zinc-200">Knowledge Graph</h2>
         {graph.stats && (
           <span className="text-[11px] text-zinc-500 font-mono">
             {graph.stats.pages} pages · {graph.stats.links} links
