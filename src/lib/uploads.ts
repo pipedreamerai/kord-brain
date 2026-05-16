@@ -98,9 +98,13 @@ async function uniqueSlug(base: string): Promise<string> {
   return `${base}-${Date.now()}`;
 }
 
-async function parseFile(kind: UploadKind, buf: Buffer): Promise<{ payload: UploadPayload; tags: string[] }> {
+async function parseFile(
+  kind: UploadKind,
+  buf: Buffer,
+  filename: string,
+): Promise<{ payload: UploadPayload; tags: string[] }> {
   if (kind === 'pdf') {
-    const info = await loadPdf(buf);
+    const info = await loadPdf(buf, { filename });
     return { payload: { kind: 'pdf', pages: info.pages }, tags: info.tags };
   }
   if (kind === 'docx') {
@@ -174,7 +178,7 @@ export async function loadCache(): Promise<Map<string, UploadedDoc>> {
   for (const entry of meta.docs) {
     try {
       const buf = await readFile(path.join(UPLOADS_DIR, entry.filename));
-      const { payload } = await parseFile(entry.kind, buf);
+      const { payload } = await parseFile(entry.kind, buf, entry.filename);
       cache.set(entry.slug, { ...entry, payload });
     } catch {
       // Stale meta entry — skip.
@@ -199,7 +203,7 @@ export async function ingestUpload(filename: string, buf: Buffer): Promise<Uploa
 
   const baseSlug = slugFromFilename(safeName);
   const slug = await uniqueSlug(baseSlug);
-  const { payload, tags } = await parseFile(kind, buf);
+  const { payload, tags } = await parseFile(kind, buf, filename);
 
   const doc: UploadedDoc = {
     slug,

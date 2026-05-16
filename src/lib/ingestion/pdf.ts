@@ -1,17 +1,25 @@
 import { PDFDocument } from 'pdf-lib';
 import { tagRegex } from '../tagRegex';
+import { extractPdfTagsWithVision } from './pdf-vision';
 
 export type PdfPageInfo = { number: number; width: number; height: number };
 
+export type PdfTagSource = 'text-layer' | 'vision' | 'none';
+
 export type PdfDocInfo = {
   pages: PdfPageInfo[];
-  /** Distinct tags found anywhere in the document text layer. */
+  /** Distinct tags found in the document. */
   tags: string[];
   /** Page-keyed text content (best-effort; may be empty if extraction fails). */
   pageText: Record<number, string>;
+  /** Where the tags came from — useful for logging and UI hints. */
+  tagSource: PdfTagSource;
 };
 
-export async function loadPdf(buf: Buffer): Promise<PdfDocInfo> {
+export async function loadPdf(
+  buf: Buffer,
+  opts: { filename?: string } = {},
+): Promise<PdfDocInfo> {
   const pdf = await PDFDocument.load(new Uint8Array(buf));
   const pages: PdfPageInfo[] = pdf.getPages().map((p, i) => ({
     number: i + 1,
@@ -50,5 +58,33 @@ export async function loadPdf(buf: Buffer): Promise<PdfDocInfo> {
     }
   }
 
-  return { pages, tags: [...tagSet].sort(), pageText };
+  if (tagSet.size > 0) {
+    return {
+      pages,
+      tags: [...tagSet].sort(),
+      pageText,
+      tagSource: 'text-layer',
+    };
+  }
+
+  // Text layer was empty or unparseable — fall back to Claude vision.
+  // Engineering drawings exported from CAD are usually raster-only.
+  try {
+    const vision = await extractPdfTagsWithVision(buf, opts);
+    console.log(
+      `[pdf-vision] ${opts.filename ?? '<pdf>'}: ${vision.tags.length} tags from ${vision.rawCount} raw (model=${vision.model})`,
+    );
+    return {
+      pages,
+      tags: vision.tags,
+      pageText,
+      tagSource: vision.tags.length > 0 ? 'vision' : 'none',
+    };
+  } catch (err) {
+    console.warn(
+      `[pdf-vision] failed for ${opts.filename ?? '<pdf>'}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return { pages, tags: [], pageText, tagSource: 'none' };
+  }
 }
