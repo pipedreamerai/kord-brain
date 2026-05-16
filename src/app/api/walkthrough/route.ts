@@ -70,14 +70,34 @@ export async function POST(req: NextRequest) {
     output: 'array',
     schema: Beat,
     prompt,
-    temperature: 0.2,
   });
+
+  const ctxPayload = {
+    type: 'context' as const,
+    root: ctx.rootSlug,
+    neighbors: ctx.neighbors.map((n) => ({
+      slug: n.slug,
+      kind: n.kind,
+      title: n.page.frontmatter.title ?? n.slug,
+    })),
+    edges: ctx.graph
+      .filter((node) => node.depth === 0)
+      .flatMap((node) =>
+        node.links
+          .filter((l) => l.to_slug !== node.slug)
+          .map((l) => ({ from: node.slug, to: l.to_slug, kind: l.link_type })),
+      ),
+    backlinks: Array.from(
+      new Set(ctx.incoming.map((b) => b.from_slug).filter((s) => s !== ctx.rootSlug)),
+    ),
+  };
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let i = 0;
       try {
+        controller.enqueue(encoder.encode(JSON.stringify(ctxPayload) + '\n'));
         for await (const beat of result.elementStream) {
           const cleaned = filterBeat(beat, validPairs);
           if (!cleaned) continue;

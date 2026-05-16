@@ -16,6 +16,15 @@ type Beat = {
   highlights: { tag: Tag; doc: DocSlug }[];
 };
 
+type GbrainNeighbor = { slug: string; kind: 'tag' | 'document' | 'unknown'; title: string };
+type GbrainEdge = { from: string; to: string; kind: string };
+type GbrainContext = {
+  root: string;
+  neighbors: GbrainNeighbor[];
+  edges: GbrainEdge[];
+  backlinks: string[];
+};
+
 type Status = 'idle' | 'streaming' | 'done' | 'error';
 
 export function WalkthroughPanel({ tagIndex }: Props) {
@@ -27,6 +36,7 @@ export function WalkthroughPanel({ tagIndex }: Props) {
   const [activeBeat, setActiveBeat] = useState<number | null>(null);
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [gbrainCtx, setGbrainCtx] = useState<GbrainContext | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -56,6 +66,7 @@ export function WalkthroughPanel({ tagIndex }: Props) {
     setActiveBeat(null);
     setError(null);
     setStatus('streaming');
+    setGbrainCtx(null);
     clearHighlights();
 
     try {
@@ -97,6 +108,15 @@ export function WalkthroughPanel({ tagIndex }: Props) {
           }
           if (parsed.done === true) {
             setStatus('done');
+            continue;
+          }
+          if (parsed.type === 'context' && typeof parsed.root === 'string') {
+            setGbrainCtx({
+              root: parsed.root,
+              neighbors: (parsed.neighbors as GbrainNeighbor[]) ?? [],
+              edges: (parsed.edges as GbrainEdge[]) ?? [],
+              backlinks: (parsed.backlinks as string[]) ?? [],
+            });
             continue;
           }
           if (
@@ -148,12 +168,50 @@ export function WalkthroughPanel({ tagIndex }: Props) {
       </div>
 
       <p className="text-[10px] text-zinc-500 mb-3 leading-snug">
-        Streams beats from{' '}
+        Context is selected by <span className="font-semibold text-emerald-700">gbrain</span> (knowledge graph
+        over the raw docs), then streamed through{' '}
         <code className="text-[10px] bg-zinc-100 px-1 py-0.5 rounded">
           anthropic/claude-opus-4-7
         </code>{' '}
-        via Vercel AI Gateway. Each beat retargets highlights across the doc set.
+        via the AI Gateway. Each beat retargets highlights across the doc set.
       </p>
+
+      {gbrainCtx && (
+        <div className="mb-3 border border-emerald-200 bg-emerald-50/60 rounded p-2">
+          <div className="flex items-baseline gap-2 mb-1.5">
+            <span className="text-[10px] font-mono uppercase tracking-wide text-emerald-800 font-semibold">
+              gbrain
+            </span>
+            <span className="text-[10px] text-emerald-900">
+              context for <code className="bg-white/70 px-1 rounded">{gbrainCtx.root}</code> —{' '}
+              {gbrainCtx.neighbors.length} pages, {gbrainCtx.edges.length} 1-hop edges
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {gbrainCtx.neighbors.map((n) => (
+              <span
+                key={n.slug}
+                title={n.title}
+                className={
+                  'text-[10px] font-mono px-1.5 py-0.5 rounded ' +
+                  (n.kind === 'document'
+                    ? 'bg-indigo-100 text-indigo-800'
+                    : n.kind === 'tag'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-zinc-100 text-zinc-700')
+                }
+              >
+                {n.kind === 'document' ? '📄 ' : '·'} {n.slug}
+              </span>
+            ))}
+          </div>
+          {gbrainCtx.backlinks.length > 0 && (
+            <div className="mt-1.5 text-[10px] text-emerald-900/70">
+              backlinks: {gbrainCtx.backlinks.join(', ')}
+            </div>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded p-2 mb-3 whitespace-pre-wrap">
