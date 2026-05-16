@@ -37,8 +37,8 @@ export const DOCS: readonly DocMeta[] = [
   {
     slug: 'ro_spec',
     filename: 'ro_spec.pdf',
-    filePath: 'Bid/RO Unit Description.pdf',
-    displayName: 'RO Unit Description',
+    filePath: 'Bid/Firm Quote.pdf',
+    displayName: 'Firm Quote',
     kind: 'pdf',
   },
   {
