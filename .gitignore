@@ -45,3 +45,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
+
+# vision pipeline derived artifacts + ad-hoc uploads
+samples/derived/
+samples/uploaded/
