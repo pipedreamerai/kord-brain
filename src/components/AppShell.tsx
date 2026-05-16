@@ -45,10 +45,10 @@ export function AppShell() {
         <div className="flex-1 min-w-0">
           <FilesTab />
         </div>
-        <ChatPanel />
         <div className="w-[34%] min-w-[320px] border-l border-zinc-800">
           <GraphTab />
         </div>
+        <ChatPanel />
       </div>
     </div>
   );
