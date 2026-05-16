@@ -100,6 +100,27 @@ function parseMarkdown(slug: string, raw: string): Page {
   return { slug, frontmatter, markdown: m[2].trim() };
 }
 
+export type GbrainStats = { pages: number; links: number };
+
+export async function stats(): Promise<GbrainStats> {
+  const out = await runGbrain(['stats']);
+  const pages = parseInt(out.match(/pages[:\s]+(\d+)/i)?.[1] ?? '0', 10);
+  const links = parseInt(out.match(/links[:\s]+(\d+)/i)?.[1] ?? '0', 10);
+  return { pages, links };
+}
+
+export async function list(limit = 200): Promise<string[]> {
+  try {
+    const out = await runGbrain(['list', '-n', String(limit)]);
+    return out
+      .split('\n')
+      .map(l => l.trim().split(/\s+/)[0])
+      .filter(s => s.length > 0 && /^[a-z0-9_/-]+$/.test(s));
+  } catch {
+    return [];
+  }
+}
+
 export async function getRelatedContext(slug: string, depth = 1): Promise<{
   root: Page;
   neighbors: Page[];

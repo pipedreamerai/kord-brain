@@ -1,7 +1,5 @@
-import { DemoLayout } from '@/components/DemoLayout';
-import { getTagIndex } from '@/lib/tagIndex';
+import { SeedGate } from '@/components/SeedGate';
 
-export default async function Home() {
-  const { tagIndex, docs } = await getTagIndex();
-  return <DemoLayout tagIndex={tagIndex} docs={docs} />;
+export default function Home() {
+  return <SeedGate />;
 }
