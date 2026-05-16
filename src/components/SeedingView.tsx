@@ -1,6 +1,5 @@
 'use client';
 
-import { FullGbrainGraph } from './FullGbrainGraph';
 import { DOCS } from '@/lib/docs';
 import { useSeedStore, type SeedEvent } from '@/lib/seedStore';
 
@@ -24,6 +23,14 @@ export function SeedingView({ onComplete }: Props) {
     return <Landing onSeed={runSeed} />;
   }
 
+  // ingestion progress per doc, derived from event log
+  const docStatus = new Map<string, { tagCount: number; tags: string[]; done: boolean }>();
+  for (const ev of eventLog) {
+    if (ev.type === 'doc_done') {
+      docStatus.set(ev.slug, { tagCount: ev.tagCount, tags: ev.tags, done: true });
+    }
+  }
+
   return (
     <div className="flex flex-col h-full bg-zinc-950 text-zinc-100">
       {phaseLabel && (
@@ -32,10 +39,9 @@ export function SeedingView({ onComplete }: Props) {
         </div>
       )}
 
-      {/* Body */}
       <div className="flex flex-1 min-h-0">
-        {/* Graph panel */}
-        <div className="flex-1 flex flex-col items-center justify-center p-8 border-r border-zinc-800 min-w-0">
+        {/* Doc list — focus of the Files tab during seeding */}
+        <div className="flex-1 overflow-y-auto p-6 min-w-0">
           {stats && (
             <div className="mb-4 flex gap-5 text-[11px] font-mono">
               <span className="text-emerald-400">
@@ -48,42 +54,66 @@ export function SeedingView({ onComplete }: Props) {
               </span>
               <span className="text-zinc-600">
                 <span className="font-bold">{nodes.length}</span>
-                <span className="text-zinc-700 ml-1">nodes discovered</span>
+                <span className="text-zinc-700 ml-1">brain nodes</span>
               </span>
               <span className="text-zinc-700">
                 <span className="font-bold">{edges.length}</span>
-                <span className="text-zinc-800 ml-1">edges traced</span>
+                <span className="text-zinc-800 ml-1">edges</span>
+              </span>
+              <span className="ml-auto text-zinc-700 italic">
+                see graph in the Brain tab
               </span>
             </div>
           )}
 
-          <div className="w-full max-w-2xl">
-            <FullGbrainGraph nodes={nodes} edges={edges} />
+          <div className="space-y-2 max-w-2xl">
+            {DOCS.map((d) => {
+              const status = docStatus.get(d.slug);
+              return (
+                <div
+                  key={d.slug}
+                  className={`border rounded-lg px-3 py-2 transition-colors ${
+                    status?.done
+                      ? 'border-emerald-900/60 bg-emerald-950/20'
+                      : 'border-zinc-800 bg-zinc-900/40'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <KindBadge kind={d.kind} />
+                    <span className="text-[12px] text-zinc-200 truncate">{d.displayName}</span>
+                    {status?.done ? (
+                      <span className="ml-auto text-[10px] font-mono text-emerald-400 shrink-0">
+                        ✓ {status.tagCount} tags
+                      </span>
+                    ) : phase === 'seeding' ? (
+                      <span className="ml-auto text-[10px] font-mono text-zinc-600 italic shrink-0 animate-pulse">
+                        parsing…
+                      </span>
+                    ) : (
+                      <span className="ml-auto text-[10px] font-mono text-zinc-700 shrink-0">
+                        pending
+                      </span>
+                    )}
+                  </div>
+                  {status?.tags && status.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-0.5 mt-1.5 ml-[2.6rem]">
+                      {status.tags.slice(0, 12).map((t) => (
+                        <span
+                          key={t}
+                          className="text-[9px] bg-zinc-800 text-zinc-400 rounded px-1 font-mono"
+                        >
+                          {t}
+                        </span>
+                      ))}
+                      {status.tags.length > 12 && (
+                        <span className="text-[9px] text-zinc-700">+{status.tags.length - 12}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-
-          {nodes.length === 0 && phase === 'seeding' && (
-            <p className="text-[11px] text-zinc-600 italic mt-4 animate-pulse">
-              querying gbrain…
-            </p>
-          )}
-
-          {/* Legend */}
-          {nodes.length > 0 && (
-            <div className="mt-4 flex gap-4 text-[10px] font-mono">
-              <span className="flex items-center gap-1.5">
-                <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                <span className="text-zinc-500">brain</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="inline-block w-2.5 h-2.5 rounded-full bg-indigo-500" />
-                <span className="text-zinc-500">document</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500" />
-                <span className="text-zinc-500">tag</span>
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Event log */}
@@ -113,14 +143,6 @@ export function SeedingView({ onComplete }: Props) {
             <span>
               <span className="text-indigo-400 font-bold">{complete.docCount}</span>
               <span className="text-zinc-600 ml-1">documents parsed</span>
-            </span>
-            <span>
-              <span className="text-amber-400 font-bold">{nodes.length}</span>
-              <span className="text-zinc-600 ml-1">brain nodes</span>
-            </span>
-            <span>
-              <span className="text-zinc-400 font-bold">{edges.length}</span>
-              <span className="text-zinc-600 ml-1">edges</span>
             </span>
           </div>
           <button
@@ -163,13 +185,12 @@ function Landing({ onSeed }: { onSeed: () => void }) {
           Click to ingest documents into the gbrain knowledge graph and build the tag index.
         </p>
 
-        {/* Doc list preview */}
         <div className="border border-zinc-800 rounded-xl p-4 mb-6 text-left bg-zinc-900/40">
           <div className="text-[10px] text-zinc-600 uppercase tracking-wide font-mono mb-3">
             {DOCS.length} documents · demo_docs/
           </div>
           <div className="space-y-2">
-            {DOCS.map(d => (
+            {DOCS.map((d) => (
               <div key={d.slug} className="flex items-center gap-2.5">
                 <KindBadge kind={d.kind} />
                 <span className="text-[12px] text-zinc-300 truncate">{d.displayName}</span>
@@ -247,23 +268,11 @@ function EventCard({ ev }: { ev: SeedEvent }) {
   if (ev.type === 'doc_done') {
     return (
       <div className="bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5">
-        <div className="flex items-center gap-2 mb-1">
+        <div className="flex items-center gap-2">
           <KindBadge kind={ev.kind as 'pdf' | 'docx' | 'xlsx'} />
           <span className="text-[11px] text-zinc-300 truncate">{ev.displayName}</span>
           <span className="ml-auto text-[10px] text-zinc-600 shrink-0">{ev.tagCount} tags</span>
         </div>
-        {ev.tags.length > 0 && (
-          <div className="flex flex-wrap gap-0.5 mt-0.5">
-            {ev.tags.slice(0, 8).map(t => (
-              <span key={t} className="text-[9px] bg-zinc-800 text-zinc-500 rounded px-1 font-mono">
-                {t}
-              </span>
-            ))}
-            {ev.tags.length > 8 && (
-              <span className="text-[9px] text-zinc-700">+{ev.tags.length - 8}</span>
-            )}
-          </div>
-        )}
       </div>
     );
   }
@@ -295,7 +304,9 @@ function KindBadge({ kind }: { kind: 'pdf' | 'docx' | 'xlsx' }) {
         ? 'text-green-500 bg-green-950/40'
         : 'text-blue-500 bg-blue-950/40';
   return (
-    <span className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded shrink-0 ${cls}`}>
+    <span
+      className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded shrink-0 ${cls}`}
+    >
       {kind}
     </span>
   );
