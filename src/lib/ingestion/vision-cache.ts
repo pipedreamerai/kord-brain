@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { VisionDocResult } from './vision-types';
 
-const CACHE_DIR = path.join(process.cwd(), 'samples', 'derived', 'vision-cache');
+const CACHE_DIR = path.join(process.cwd(), '.cache', 'vision-cache');
 
 function modelIdSlug(modelId: string): string {
   return modelId.replace(/\//g, '__');
