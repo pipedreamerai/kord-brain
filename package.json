@@ -4,8 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "predev": "node scripts/preflight.mjs",
     "build": "next build",
     "start": "next start",
+    "setup": "bash scripts/setup.sh",
     "placeholders": "tsx scripts/gen-placeholders.ts",
     "copy-worker": "node scripts/copy-pdf-worker.mjs",
     "postinstall": "node scripts/copy-pdf-worker.mjs"
