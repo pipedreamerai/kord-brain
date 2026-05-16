@@ -284,17 +284,26 @@ export async function findSlugByFilename(filename: string): Promise<string | nul
 }
 
 export async function nukeAll(): Promise<{ pagesDeleted: number; filesDeleted: number }> {
+  // Ask gbrain what it has, not what our local meta thinks we uploaded — prior
+  // dev sessions can leave orphan pages that .meta.json never knew about, and
+  // those would otherwise survive reset and pollute /api/graph.
+  const slugs = new Set(await gbrain.list(5000));
+
+  // Belt-and-suspenders: union in anything meta knows about, in case `list`
+  // truncated or a page slipped through its slug-shape filter.
   const meta = await loadMeta();
-  const slugs = new Set<string>();
   for (const d of meta.docs) {
     slugs.add(d.slug);
     for (const t of d.tags) slugs.add(tagToSlug(t));
   }
 
   let pagesDeleted = 0;
-  for (const slug of slugs) {
-    await gbrain.deletePage(slug);
-    pagesDeleted += 1;
+  const slugArr = [...slugs];
+  const CONCURRENCY = 8;
+  for (let i = 0; i < slugArr.length; i += CONCURRENCY) {
+    const batch = slugArr.slice(i, i + CONCURRENCY);
+    await Promise.all(batch.map((s) => gbrain.deletePage(s)));
+    pagesDeleted += batch.length;
   }
 
   let filesDeleted = 0;

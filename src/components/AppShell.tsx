@@ -7,15 +7,24 @@ import { GraphTab } from './GraphTab';
 import { ChatPanel } from './ChatPanel';
 
 export function AppShell() {
-  const hydrate = useAppStore((s) => s.hydrate);
+  const loadInitialState = useAppStore((s) => s.loadInitialState);
+  const resetAll = useAppStore((s) => s.resetAll);
+  const resetting = useAppStore((s) => s.resetting);
   const docCount = useAppStore((s) => s.docs.length);
   const graphNodes = useAppStore((s) => s.graph.nodes.length);
   const graphEdges = useAppStore((s) => s.graph.edges.length);
   const graphStats = useAppStore((s) => s.graph.stats);
 
   useEffect(() => {
-    void hydrate();
-  }, [hydrate]);
+    void loadInitialState();
+  }, [loadInitialState]);
+
+  function handleReset() {
+    if (resetting) return;
+    const ok = window.confirm('Wipe all uploads, gbrain pages, chat, and graph state?');
+    if (!ok) return;
+    void resetAll();
+  }
 
   return (
     <div className="flex flex-col h-screen">
@@ -38,6 +47,14 @@ export function AppShell() {
               {graphStats.pages} pages · {graphStats.links} links
             </span>
           )}
+          <button
+            onClick={handleReset}
+            disabled={resetting}
+            title="Wipe uploads, gbrain pages, chat, and graph"
+            className="ml-2 px-2 py-1 rounded border border-red-900/60 bg-red-950/40 text-red-200 hover:bg-red-900/60 hover:text-red-100 disabled:opacity-50 disabled:cursor-not-allowed text-[10px] font-mono uppercase tracking-wide"
+          >
+            {resetting ? 'resetting…' : 'reset'}
+          </button>
         </div>
       </header>
 

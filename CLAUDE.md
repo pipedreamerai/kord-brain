@@ -34,7 +34,7 @@ pdf-extractor sidecar (Python + FastAPI + PyMuPDF + Tesseract, Docker)
      Tesseract OCR inside the container for raster-only pages.
 ```
 
-**No DB in this repo.** All persistence is (a) files in `./uploads/` + `.meta.json`, and (b) gbrain's PGLite store outside the repo. `appStore.hydrate()` POSTs `/api/reset` on mount — the demo always starts empty.
+**No DB in this repo.** All persistence is (a) files in `./uploads/` + `.meta.json`, and (b) gbrain's PGLite store outside the repo. State persists across page loads — hit the "reset" button in the header (or `POST /api/reset`) to nuke uploads + gbrain pages + chat.
 
 ## Key files
 

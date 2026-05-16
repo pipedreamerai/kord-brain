@@ -40,15 +40,18 @@ type AppState = {
   docs: UploadedDoc[];
   graph: GraphSnapshot;
   uploading: boolean;
+  resetting: boolean;
   uploadError: string | null;
   lastUploadCount: number;
-  hydrated: boolean;
   citedTags: Set<string>;
+  chatResetEpoch: number;
+  initialLoaded: boolean;
 
-  hydrate: () => Promise<void>;
+  loadInitialState: () => Promise<void>;
   uploadFiles: (files: File[]) => Promise<void>;
   deleteDoc: (slug: string) => Promise<void>;
   refreshGraph: () => Promise<void>;
+  resetAll: () => Promise<void>;
   setCitedTags: (tags: Set<string>) => void;
 };
 
@@ -58,24 +61,33 @@ export const useAppStore = create<AppState>((set, get) => ({
   docs: [],
   graph: EMPTY_GRAPH,
   uploading: false,
+  resetting: false,
   uploadError: null,
   lastUploadCount: 0,
-  hydrated: false,
   citedTags: new Set<string>(),
+  chatResetEpoch: 0,
+  initialLoaded: false,
 
   setCitedTags: (tags: Set<string>) => set({ citedTags: tags }),
 
-  hydrate: async () => {
-    if (get().hydrated) return;
+  loadInitialState: async () => {
+    if (get().initialLoaded) return;
+    set({ initialLoaded: true });
     try {
-      await fetch('/api/reset', { method: 'POST' });
-      set({
-        docs: [],
-        graph: EMPTY_GRAPH,
-        hydrated: true,
-      });
-    } catch (err) {
-      set({ uploadError: err instanceof Error ? err.message : String(err), hydrated: true });
+      const [uploadsRes, graphRes] = await Promise.all([
+        fetch('/api/uploads'),
+        fetch('/api/graph'),
+      ]);
+      if (!uploadsRes.ok || !graphRes.ok) return;
+      const uploadsData = (await uploadsRes.json()) as { docs: UploadedDoc[] };
+      const graphData = (await graphRes.json()) as GraphSnapshot;
+      // User may have uploaded / reset / deleted while fetches were in flight.
+      // Their action wins — only sync if state is still pristine.
+      const s = get();
+      if (s.docs.length > 0 || s.uploading || s.resetting) return;
+      set({ docs: uploadsData.docs ?? [], graph: graphData });
+    } catch {
+      // Initial sync is best-effort; missing state just means empty UI.
     }
   },
 
@@ -111,6 +123,26 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ uploadError: err instanceof Error ? err.message : String(err) });
     } finally {
       set({ uploading: false });
+    }
+  },
+
+  resetAll: async () => {
+    if (get().resetting) return;
+    set({ resetting: true, uploadError: null });
+    try {
+      const res = await fetch('/api/reset', { method: 'POST' });
+      if (!res.ok) throw new Error(`reset HTTP ${res.status}`);
+      set({
+        docs: [],
+        graph: EMPTY_GRAPH,
+        citedTags: new Set<string>(),
+        lastUploadCount: 0,
+        chatResetEpoch: get().chatResetEpoch + 1,
+      });
+    } catch (err) {
+      set({ uploadError: err instanceof Error ? err.message : String(err) });
+    } finally {
+      set({ resetting: false });
     }
   },
 

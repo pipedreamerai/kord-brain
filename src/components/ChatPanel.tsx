@@ -13,6 +13,7 @@ const CHAT_BAR_KEY = 'kord:chatBarCollapsed';
 
 export function ChatPanel() {
   const setCitedTags = useAppStore((s) => s.setCitedTags);
+  const chatResetEpoch = useAppStore((s) => s.chatResetEpoch);
   const [input, setInput] = useState('');
   const [collapsed, setCollapsed] = useState<boolean>(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -48,6 +49,13 @@ export function ChatPanel() {
   });
 
   const busy = status === 'submitted' || status === 'streaming';
+
+  useEffect(() => {
+    if (chatResetEpoch === 0) return;
+    setMessages([]);
+    clearError();
+    setInput('');
+  }, [chatResetEpoch, setMessages, clearError]);
 
   function submit() {
     const text = input.trim();
