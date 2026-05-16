@@ -43,11 +43,13 @@ type AppState = {
   uploadError: string | null;
   lastUploadCount: number;
   hydrated: boolean;
+  citedTags: Set<string>;
 
   hydrate: () => Promise<void>;
   uploadFiles: (files: File[]) => Promise<void>;
   deleteDoc: (slug: string) => Promise<void>;
   refreshGraph: () => Promise<void>;
+  setCitedTags: (tags: Set<string>) => void;
 };
 
 const EMPTY_GRAPH: GraphSnapshot = { nodes: [], edges: [], stats: { pages: 0, links: 0 } };
@@ -59,6 +61,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   uploadError: null,
   lastUploadCount: 0,
   hydrated: false,
+  citedTags: new Set<string>(),
+
+  setCitedTags: (tags: Set<string>) => set({ citedTags: tags }),
 
   hydrate: async () => {
     if (get().hydrated) return;

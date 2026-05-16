@@ -12,6 +12,7 @@ export function FilesTab() {
   const uploadError = useAppStore((s) => s.uploadError);
   const uploadFiles = useAppStore((s) => s.uploadFiles);
   const deleteDoc = useAppStore((s) => s.deleteDoc);
+  const citedTags = useAppStore((s) => s.citedTags);
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -63,6 +64,7 @@ export function FilesTab() {
                   key={d.slug}
                   doc={d}
                   active={d.slug === activeSlug}
+                  citedTags={citedTags}
                   onClick={() => setActiveSlug(d.slug)}
                   onDelete={() => {
                     if (activeSlug === d.slug) setActiveSlug(null);
@@ -80,10 +82,10 @@ export function FilesTab() {
 
           <main className="flex-1 min-w-0 bg-zinc-100 text-zinc-900 overflow-auto">
             {active ? (
-              <DocViewer doc={active} />
+              <DocViewer doc={active} citedTags={citedTags} />
             ) : (
               <div className="flex items-center justify-center h-full text-[12px] text-zinc-500">
-                Select a file from the left to preview.
+                Pick a file to see citations highlighted.
               </div>
             )}
           </main>
@@ -96,14 +98,20 @@ export function FilesTab() {
 function FileRow({
   doc,
   active,
+  citedTags,
   onClick,
   onDelete,
 }: {
   doc: UploadedDoc;
   active: boolean;
+  citedTags: Set<string>;
   onClick: () => void;
   onDelete: () => void;
 }) {
+  const citedCount = doc.tags.reduce(
+    (n, t) => n + (citedTags.has(slugify(t)) ? 1 : 0),
+    0,
+  );
   return (
     <div
       onClick={onClick}
@@ -118,12 +126,19 @@ function FileRow({
       className={`group w-full text-left rounded px-2.5 py-2 transition-colors border cursor-pointer ${
         active
           ? 'bg-blue-950/60 border-blue-800'
-          : 'border-transparent hover:bg-zinc-900/60'
+          : citedCount > 0
+            ? 'border-amber-900/40 bg-amber-950/20 hover:bg-amber-950/30'
+            : 'border-transparent hover:bg-zinc-900/60'
       }`}
     >
       <div className="flex items-center gap-2">
         <KindBadge kind={doc.kind} />
         <span className="text-[12px] text-zinc-200 truncate flex-1">{doc.displayName}</span>
+        {citedCount > 0 && (
+          <span className="text-[9px] font-mono text-amber-300 bg-amber-950/60 border border-amber-900/60 rounded px-1 shrink-0">
+            {citedCount} cited
+          </span>
+        )}
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -150,7 +165,11 @@ function FileRow({
           {doc.tags.slice(0, 8).map((t) => (
             <span
               key={t}
-              className="text-[9px] bg-zinc-800 text-zinc-400 rounded px-1 font-mono"
+              className={`text-[9px] rounded px-1 font-mono ${
+                citedTags.has(slugify(t))
+                  ? 'bg-amber-900/60 text-amber-200'
+                  : 'bg-zinc-800 text-zinc-400'
+              }`}
             >
               {t}
             </span>
@@ -164,15 +183,14 @@ function FileRow({
   );
 }
 
-function DocViewer({ doc }: { doc: UploadedDoc }) {
+function DocViewer({ doc, citedTags }: { doc: UploadedDoc; citedTags: Set<string> }) {
   const noop = () => {};
-  const empty = new Set<string>();
   if (doc.payload.kind === 'pdf') {
     return (
       <PdfViewer
         url={`/api/uploads/${encodeURIComponent(doc.filename)}`}
         bboxes={[]}
-        highlightedTags={empty}
+        highlightedTags={citedTags}
         onTagClick={noop}
       />
     );
@@ -181,7 +199,7 @@ function DocViewer({ doc }: { doc: UploadedDoc }) {
     return (
       <DocxViewer
         html={doc.payload.html}
-        highlightedAnchors={empty}
+        highlightedTags={citedTags}
         onTagClick={noop}
       />
     );
@@ -189,7 +207,7 @@ function DocViewer({ doc }: { doc: UploadedDoc }) {
   return (
     <XlsxViewer
       sheets={doc.payload.sheets}
-      highlightedTags={empty}
+      highlightedTags={citedTags}
       onTagClick={noop}
     />
   );
@@ -215,7 +233,7 @@ function EmptyState({
         </h1>
         <p className="text-zinc-500 text-sm mb-8">
           Upload PDFs, DOCX, or XLSX. Tags are extracted and pushed into the
-          knowledge graph.
+          knowledge graph. Or ask the brain a question on the right.
         </p>
         <button
           onClick={onUpload}
@@ -253,4 +271,8 @@ function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function slugify(tag: string): string {
+  return tag.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }

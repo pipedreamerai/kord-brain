@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useAppStore } from '@/lib/appStore';
 import { FilesTab } from './FilesTab';
 import { GraphTab } from './GraphTab';
+import { ChatPanel } from './ChatPanel';
 
 export function AppShell() {
   const hydrate = useAppStore((s) => s.hydrate);
@@ -41,12 +42,13 @@ export function AppShell() {
       </header>
 
       <div className="flex-1 min-h-0 flex">
-        <div className="flex-1 min-w-0 border-r border-zinc-800">
+        <div className="flex-1 min-w-0">
           <FilesTab />
         </div>
-        <div className="w-[42%] min-w-[360px]">
+        <div className="w-[34%] min-w-[320px] border-l border-zinc-800">
           <GraphTab />
         </div>
+        <ChatPanel />
       </div>
     </div>
   );
