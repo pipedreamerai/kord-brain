@@ -38,7 +38,8 @@ pnpm dev                         # http://localhost:3000
 
 - Tag-schema edits go in `src/lib/tags.ts` only. Re-run `pnpm placeholders` afterwards.
 - Real drawings ship with hand-annotated `<doc>.bboxes.json` sidecars validated against `samples/bboxes.schema.json`.
-- Phase 2 walkthrough endpoint (`/api/walkthrough`) will post-validate every AI-emitted tag against the index; hallucinated tags get dropped.
+- The `/api/walkthrough` endpoint post-validates every AI-emitted tag against the tag index; hallucinated `(tag, doc)` pairs are dropped (see `filterBeat` in `src/app/api/walkthrough/route.ts`).
+- The walkthrough prompt context is selected by **gbrain** (knowledge graph), not by dumping all docs. See "Current state" below for the runtime split.
 
 ### Current stack
 
