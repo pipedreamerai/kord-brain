@@ -231,7 +231,7 @@ cmd_new() {
   echo >&2 "[wt] Splitting Ghostty"
   split_dev_and_shell "$origin_term_id" "$wt_path" "$port"
 
-  cd "$wt_path" && exec claude
+  cd "$wt_path" && exec claude --dangerously-skip-permissions
 }
 
 cmd_start() {
@@ -306,7 +306,7 @@ $(ghostty_select_term_script "$origin_term_id")
   wt_path="$(create_worktree "${ports[0]}")" || exit 1
   echo >&2 "[wt] Splitting Ghostty"
   split_dev_and_shell "$origin_term_id" "$wt_path" "${ports[0]}"
-  cd "$wt_path" && exec claude
+  cd "$wt_path" && exec claude --dangerously-skip-permissions
 }
 
 # Internal: invoked by spawned panes during `wt.sh start`. Creates the worktree
@@ -324,7 +324,7 @@ cmd_init_port() {
   wt_path="$(create_worktree "$port")" || exit 1
   echo >&2 "[wt] Splitting Ghostty"
   split_dev_and_shell "$target_term_id" "$wt_path" "$port"
-  cd "$wt_path" && exec claude
+  cd "$wt_path" && exec claude --dangerously-skip-permissions
 }
 
 cmd_sync() {
