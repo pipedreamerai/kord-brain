@@ -43,7 +43,98 @@ pnpm dev                         # http://localhost:3000
 
 ### Current stack
 
-Next.js 16 App Router with Turbopack, React 19, Tailwind 4, `pdfjs-dist`, `mammoth`, `xlsx` (SheetJS), AI SDK v6 + Vercel AI Gateway, Zustand, and Zod.
+Next.js 16 App Router with Turbopack, React 19, Tailwind 4, `pdfjs-dist`, `mammoth`, `xlsx` (SheetJS), AI SDK v6 + Vercel AI Gateway, Zustand, and Zod. **Runtime knowledge graph:** gbrain v0.35.1.0 (TypeScript/Bun, PGLite-backed) called via CLI shell-out from Next.js API routes.
+
+---
+
+## Current state (handoff snapshot, 2026-05-16)
+
+The aspirational quickstart above (`pnpm install → postinstall setup.sh → vercel env pull`) is partly aspirational. This section documents what is wired today vs what's left to build so a fresh session can pick up cleanly.
+
+### What works end-to-end right now
+
+1. **gbrain installed.** Binary at `~/.bun/bin/gbrain` (v0.35.1.0). Source clone at `/Users/w/projects/gbrain` (sibling to this repo). Brain at `~/.gbrain/brain.pglite` (PGLite default, no Postgres needed).
+2. **Brain is seeded.** 13 pages and 90 typed-link edges from `samples/brain-md/` (5 doc pages + 8 tag-entity pages). Verify with `gbrain stats`.
+3. **Live walkthrough.** `pnpm dev`, open `localhost:3000`, click **Walk through M-101**:
+   - Green **gbrain** provenance card renders first: "context for `m-101` — 9 pages, 9 1-hop edges"
+   - Embedded radial SVG graph: emerald root, indigo doc nodes (`pid`, `electrical`, `equipment_list`, `motor_spec`), amber tag nodes (`cb-101`, `cv-301`, `ir-2`, `lsl-201`, `mcc-1`, `p-101`). Tag nodes are clickable — re-runs the walkthrough on that tag.
+   - 6 streaming beats from `anthropic/claude-opus-4-7` (via AI Gateway) follow, each grounded in the gbrain-selected context. Closes with the long-lead `CB-101` procurement risk.
+   - Highlights jump across PDF / DOCX / XLSX viewers as each beat lands (driven by the existing tag index + bbox sidecars).
+4. **Docker Postgres container** `kord-brain-pg` on `:5432→5433` exists from an earlier path (`pgvector/pgvector:pg16`). Unused — gbrain defaulted to PGLite. Safe to ignore or `docker stop kord-brain-pg`.
+
+### Runtime architecture (post-gbrain)
+
+```
+click on M-101
+     ▼
+POST /api/walkthrough { tag: "M-101" }
+     │
+     ├─► tagIndex.ts  (bbox + valid (tag,doc) pairs, kept for highlight + hallucination filter)
+     │
+     ├─► buildWalkthroughContext(tag) — src/lib/walkthroughContext.ts
+     │     ├─► gbrain.graph(m-101, 1)        (one-hop subgraph)
+     │     ├─► gbrain.backlinks(m-101)        (incoming refs)
+     │     └─► gbrain.getPage(slug) × N       (markdown for each neighbor)
+     │
+     ├─► first NDJSON line:  { type:"context", root, neighbors, edges, backlinks }
+     │   (WalkthroughPanel renders the green card + radial graph from this)
+     │
+     └─► streamObject(claude-opus-4-7) yields beats
+         each beat passes filterBeat(beat, validPairs)  ← kills hallucinated highlights
+```
+
+**Why this split:** gbrain owns semantic graph + cross-doc retrieval; `tagIndex.ts` owns pixel coords + hallucination filtering; the LLM owns narrative. Each layer audits the next.
+
+### Files added or rewritten this session
+
+| Path | Status | Purpose |
+|---|---|---|
+| `src/lib/gbrain.ts` | NEW | Node client; shells out to `gbrain` CLI via `child_process.execFile`, sets `PATH=~/.bun/bin:$PATH` in spawn env (the binary's shebang is `#!/usr/bin/env bun`). Exposes `graph()`, `backlinks()`, `search()`, `getPage()`. |
+| `src/components/GbrainGraph.tsx` | NEW | Deterministic radial SVG viz. No external dep, no physics simulation. Tag nodes accept `onNodeClick`. |
+| `samples/brain-md/` | NEW | 13 flat markdown files (5 docs + 8 tag entities) with `[[lowercase-slug]]` wikilinks. **Seeds the brain.** Frontmatter must NOT include `slug:` (gbrain rejects mismatches with path-derived slug). |
+| `src/lib/walkthroughContext.ts` | REWRITTEN | Was raw-file dump; now fetches gbrain subgraph + neighbor pages. |
+| `src/app/api/walkthrough/route.ts` | UPDATED | Emits `{type:"context",...}` as first NDJSON line; drops the unsupported `temperature` param. |
+| `src/components/WalkthroughPanel.tsx` | UPDATED | Renders the gbrain provenance card with embedded `GbrainGraph`. |
+
+### How to re-seed or update the brain (manual, until `pnpm setup` exists)
+
+Run from the repo root after editing anything in `samples/brain-md/`:
+
+```bash
+export PATH="$HOME/.bun/bin:$PATH"
+
+# Delete stale pages (gbrain import is upsert-by-slug; only needed when removing pages)
+for s in cb-101 cv-301 electrical equipment_list ir-2 lsl-201 m-101 mcc-1 motor_spec p-101 pid process_narrative t-101; do
+  gbrain delete "$s" 2>/dev/null
+done
+
+gbrain import samples/brain-md --no-embed
+gbrain extract links --source fs --dir samples/brain-md   # `--source db` extracts 0 links — known gotcha
+gbrain stats                                              # expect Pages: 13, Links: ~90
+```
+
+### Known gotchas
+
+- **gbrain wikilink resolution.** Resolves against the **path-derived lowercase slug**, not frontmatter. `[[M-101]]` won't match slug `m-101` — write `[[m-101]]`. Adding `slug:` to frontmatter causes import to skip the file.
+- **`extract links --source db` returns 0 edges.** Use `--source fs --dir samples/brain-md` instead. (gbrain bug or design — TBD.)
+- **CLI needs Bun on PATH at child_process spawn time.** The Next.js dev server inherits PATH from the shell that started it. `src/lib/gbrain.ts` injects `~/.bun/bin` defensively, but if `gbrain` is installed elsewhere set `BUN_BIN_DIR` env.
+- **No embeddings yet.** `gbrain import --no-embed` skips vector indexing. Hybrid `gbrain query` returns "No results"; keyword `gbrain search` works fine, and graph traversal works fine. Adding `OPENAI_API_KEY` and running `gbrain embed --all` lights up vector search.
+- **gbrain npm name is squatted.** Always install from `git clone https://github.com/garrytan/gbrain.git && bun install && bun link`. Never `npm i gbrain` or `bun install -g github:garrytan/gbrain` (postinstall hooks don't fire on global, schema migrations fail).
+
+### Loose ends in priority order
+
+1. **`pnpm setup` script (`scripts/setup.sh`).** The Quickstart promises `postinstall` automation but the script doesn't exist on disk. It should: detect/install Bun → clone gbrain to `~/.cache/kord-brain/gbrain` → `bun install && bun link` → `gbrain init` → seed-import `samples/brain-md/`. Idempotent.
+2. **Design-packet ingestion flow** (the §1 demo arc). `samples/packet/` with `pid_update.pdf`, `electrical_update.pdf`, `design_intent.md`, `equipment_list_update.xlsx`, `bboxes_update.json` containing `P-102 / M-102 / CB-102 / XV-302`. "Load packet" button that calls a new `/api/packet/ingest` endpoint, runs `gbrain import` against the packet, computes a before/after graph delta, and streams ingestion beats to a new **knowledge update panel**.
+3. **Q&A endpoint** (`/api/qa`). Natural-language questions against the updated graph. Reuse `gbrain.search()` + `gbrain.graph()` for context; require citations in the response shape; reuse the highlight-drive pattern from the walkthrough.
+4. **`vercel env pull` wired into onboarding.** Project is `pipedreamer/kord-brain`. Doc the `vercel link` first-run flow and which envs ship which keys.
+5. **Stretch:** duty/standby auto-switchover analysis, graph-delta animation, browser auto-scroll polish.
+
+### Where memory lives
+
+- `~/.gbrain/` — the live brain (PGLite + migrations + skills cache). Do not commit.
+- `~/.bun/` — Bun toolchain. PATH-added to `~/.zshrc` by the installer.
+- `/Users/w/projects/gbrain/` — gbrain source clone (sibling to this repo). The `gbrain` CLI is a `bun link` symlink to `src/cli.ts` inside this clone.
+- `samples/brain-md/` (in-repo) — the seed corpus. **This is the source of truth for the brain's content** — re-running the manual seed commands above is how you rebuild from scratch.
 
 ---
 
