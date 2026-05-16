@@ -14,14 +14,15 @@
 ### Setup
 
 ```bash
-pnpm install
-cp .env.example .env.local       # then fill in AI_GATEWAY_API_KEY
-pnpm setup                       # bun + gbrain CLI + PGLite brain + seed import
+pnpm install                     # installs deps AND provisions gbrain sidecar
+vercel env pull                  # pulls AI_GATEWAY_API_KEY etc. into .env.local
 pnpm placeholders                # generate placeholder sample documents
 pnpm dev                         # http://localhost:3000
 ```
 
-`pnpm setup` is idempotent. It requires Bun (`curl -fsSL https://bun.sh/install | bash`); everything else (gbrain clone, `bun link`, `gbrain init`, importing `samples/gbrain-seed/`) is automatic. `pnpm dev` runs a preflight that fails fast with a pointer to `pnpm setup` if gbrain isn't reachable.
+`vercel env pull` will prompt you to `vercel login` and link the project on first run (the team is `pipedreamer`, project `kord-brain`). After that it just refreshes `.env.local` in place.
+
+`pnpm install` chains into `scripts/setup.sh` via `postinstall`. The setup script is idempotent and handles everything end-to-end: installs Bun if missing (`curl | bash`), clones gbrain to `~/.cache/kord-brain/gbrain`, runs `bun install && bun link`, `gbrain init` (PGLite, no Postgres), and imports `samples/gbrain-seed/`. `pnpm dev` runs a preflight that fails fast if gbrain isn't reachable. To re-run setup manually: `pnpm setup`.
 
 ### Layout
 
