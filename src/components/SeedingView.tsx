@@ -1,103 +1,27 @@
 'use client';
 
-import { useState } from 'react';
-import { FullGbrainGraph, type BrainNode, type BrainEdge } from './FullGbrainGraph';
+import { FullGbrainGraph } from './FullGbrainGraph';
 import { DOCS } from '@/lib/docs';
-
-type Phase = 'idle' | 'seeding' | 'done' | 'error';
-
-type SeedEvent =
-  | { type: 'phase'; label: string }
-  | { type: 'stats'; pages: number; links: number }
-  | { type: 'slugs_found'; count: number }
-  | { type: 'brain_node'; slug: string; title: string; kind: string; snippet: string }
-  | { type: 'brain_edge'; from: string; to: string; kind: string }
-  | { type: 'graph_ready'; nodes: BrainNode[]; edges: BrainEdge[] }
-  | { type: 'doc_done'; slug: string; displayName: string; kind: string; tagCount: number; tags: string[] }
-  | { type: 'complete'; totalTagged: number; docCount: number }
-  | { type: 'error'; message: string };
+import { useSeedStore, type SeedEvent } from '@/lib/seedStore';
 
 type Props = {
   onComplete: () => void;
 };
 
 export function SeedingView({ onComplete }: Props) {
-  const [phase, setPhase] = useState<Phase>('idle');
-  const [phaseLabel, setPhaseLabel] = useState('');
-  const [gStats, setGStats] = useState<{ pages: number; links: number } | null>(null);
-  const [nodes, setNodes] = useState<BrainNode[]>([]);
-  const [edges, setEdges] = useState<BrainEdge[]>([]);
-  const [eventLog, setEventLog] = useState<SeedEvent[]>([]);
-  const [complete, setComplete] = useState<{ totalTagged: number; docCount: number } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  function push(e: SeedEvent) {
-    setEventLog(prev => [...prev.slice(-80), e]);
-  }
-
-  async function startSeeding() {
-    setPhase('seeding');
-    setNodes([]);
-    setEdges([]);
-    setEventLog([]);
-    setGStats(null);
-    setComplete(null);
-    setError(null);
-
-    try {
-      const res = await fetch('/api/seed');
-      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let buf = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-
-        let nl: number;
-        while ((nl = buf.indexOf('\n')) >= 0) {
-          const line = buf.slice(0, nl).trim();
-          buf = buf.slice(nl + 1);
-          if (!line) continue;
-          let ev: SeedEvent;
-          try {
-            ev = JSON.parse(line);
-          } catch {
-            continue;
-          }
-
-          push(ev);
-
-          if (ev.type === 'phase') {
-            setPhaseLabel(ev.label);
-          } else if (ev.type === 'stats') {
-            setGStats({ pages: ev.pages, links: ev.links });
-          } else if (ev.type === 'brain_node') {
-            setNodes(prev => [...prev, { slug: ev.slug, title: ev.title, kind: ev.kind }]);
-          } else if (ev.type === 'brain_edge') {
-            setEdges(prev => [...prev, { from: ev.from, to: ev.to, kind: ev.kind }]);
-          } else if (ev.type === 'complete') {
-            setComplete({ totalTagged: ev.totalTagged, docCount: ev.docCount });
-            setPhase('done');
-          } else if (ev.type === 'error') {
-            setError(ev.message);
-            setPhase('error');
-          }
-        }
-      }
-
-      setPhase(p => (p === 'seeding' ? 'done' : p));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setPhase('error');
-    }
-  }
+  const phase = useSeedStore((s) => s.phase);
+  const phaseLabel = useSeedStore((s) => s.phaseLabel);
+  const stats = useSeedStore((s) => s.stats);
+  const nodes = useSeedStore((s) => s.nodes);
+  const edges = useSeedStore((s) => s.edges);
+  const eventLog = useSeedStore((s) => s.eventLog);
+  const complete = useSeedStore((s) => s.complete);
+  const error = useSeedStore((s) => s.error);
+  const runSeed = useSeedStore((s) => s.runSeed);
+  const reset = useSeedStore((s) => s.reset);
 
   if (phase === 'idle') {
-    return <Landing onSeed={startSeeding} />;
+    return <Landing onSeed={runSeed} />;
   }
 
   return (
@@ -112,14 +36,14 @@ export function SeedingView({ onComplete }: Props) {
       <div className="flex flex-1 min-h-0">
         {/* Graph panel */}
         <div className="flex-1 flex flex-col items-center justify-center p-8 border-r border-zinc-800 min-w-0">
-          {gStats && (
+          {stats && (
             <div className="mb-4 flex gap-5 text-[11px] font-mono">
               <span className="text-emerald-400">
-                <span className="font-bold">{gStats.pages}</span>
+                <span className="font-bold">{stats.pages}</span>
                 <span className="text-zinc-500 ml-1">pages</span>
               </span>
               <span className="text-zinc-400">
-                <span className="font-bold">{gStats.links}</span>
+                <span className="font-bold">{stats.links}</span>
                 <span className="text-zinc-500 ml-1">links</span>
               </span>
               <span className="text-zinc-600">
@@ -212,7 +136,7 @@ export function SeedingView({ onComplete }: Props) {
         <div className="shrink-0 px-6 py-4 border-t border-zinc-800 flex items-center gap-4">
           <span className="text-red-400 text-sm truncate">{error}</span>
           <button
-            onClick={() => setPhase('idle')}
+            onClick={reset}
             className="ml-auto text-[12px] text-zinc-400 underline underline-offset-2 hover:text-white transition-colors"
           >
             retry

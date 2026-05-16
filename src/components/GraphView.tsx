@@ -1,51 +1,31 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { FullGbrainGraph, type BrainNode, type BrainEdge } from './FullGbrainGraph';
-
-type GraphData = {
-  nodes: BrainNode[];
-  edges: BrainEdge[];
-  stats: { pages: number; links: number };
-};
+import { FullGbrainGraph } from './FullGbrainGraph';
+import { useSeedStore } from '@/lib/seedStore';
 
 export function GraphView() {
-  const [data, setData] = useState<GraphData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const phase = useSeedStore((s) => s.phase);
+  const nodes = useSeedStore((s) => s.nodes);
+  const edges = useSeedStore((s) => s.edges);
+  const stats = useSeedStore((s) => s.stats);
+  const error = useSeedStore((s) => s.error);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/graph');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setData(await res.json());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
+  const hasData = nodes.length > 0;
 
   return (
     <div className="flex flex-col h-full p-6 bg-zinc-950">
       <div className="flex items-center gap-3 mb-4">
         <h2 className="text-sm font-semibold text-zinc-200">Knowledge Graph</h2>
-        {data && (
+        {stats && (
           <span className="text-[11px] text-zinc-500 font-mono">
-            {data.stats.pages} pages · {data.stats.links} links
+            {stats.pages} pages · {stats.links} links
           </span>
         )}
-        <button
-          onClick={load}
-          disabled={loading}
-          className="ml-auto text-[11px] bg-emerald-800 text-emerald-200 border border-emerald-700 rounded px-3 py-1 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? 'Refreshing…' : 'Refresh'}
-        </button>
+        {phase === 'seeding' && (
+          <span className="text-[11px] text-emerald-400 font-mono animate-pulse">
+            seeding…
+          </span>
+        )}
       </div>
 
       {error && (
@@ -54,17 +34,24 @@ export function GraphView() {
         </div>
       )}
 
-      {loading && !data && (
-        <div className="flex-1 flex items-center justify-center text-sm text-zinc-600 animate-pulse font-mono">
-          loading brain…
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 min-h-0 rounded-lg border border-zinc-800 overflow-hidden relative">
+          {hasData ? (
+            <FullGbrainGraph nodes={nodes} edges={edges} />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-[12px] text-zinc-600 font-mono">
+                  blank canvas
+                </p>
+                <p className="text-[11px] text-zinc-700 mt-1">
+                  open the <span className="text-blue-400">Files</span> tab and click <span className="text-emerald-400">Seed Knowledge Base</span>
+                </p>
+              </div>
+            </div>
+          )}
         </div>
-      )}
-
-      {data && (
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="flex-1 min-h-0 rounded-lg border border-zinc-800 overflow-hidden">
-            <FullGbrainGraph nodes={data.nodes} edges={data.edges} />
-          </div>
+        {hasData && (
           <div className="mt-3 flex items-center gap-5 text-[10px] text-zinc-600">
             <span className="flex items-center gap-1.5">
               <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" /> brain
@@ -76,11 +63,11 @@ export function GraphView() {
               <span className="inline-block w-2 h-2 rounded-full bg-amber-500" /> tag / entity
             </span>
             <span className="ml-auto text-zinc-700">
-              click Refresh after adding documents
+              {nodes.length} nodes · {edges.length} edges
             </span>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
