@@ -24,6 +24,6 @@ Operational description of the Evoqua Vantage M284R two-pass RO unit for Electri
 
 ## Cross-references
 
-- [[instrument_list]] — instrument datasheet for all tags mentioned
-- [[ro_spec]] — equipment specification referenced in §7 control system
-- [[pid]] — P&ID showing flow path described in §3–5
+- [[dd_instrument_list]] — instrument datasheet for all tags mentioned
+- [[bid_firm_quote]] — equipment specification referenced in §7 control system
+- [[bid_pid]] — P&ID showing flow path described in §3–5

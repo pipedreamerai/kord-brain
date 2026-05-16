@@ -4,7 +4,7 @@ type: document
 doc_kind: pdf
 ---
 
-# [[pid]] — Bid P&ID
+# [[bid_pid]] — Bid P&ID
 
 Single-page process and instrument diagram submitted with the Evoqua bid for project 2034/001845 (Electric Hydrogen, Beaumont TX). Shows the two-pass RO skid process flow at bid stage.
 
@@ -21,9 +21,9 @@ Feed water inlet through cartridge filter, 1st-pass pump and membrane array, int
 
 ## Relationship to detailed design
 
-The bid P&ID is a simplified precursor to [[instrument_list]] and the full P&ID. Tag numbers are consistent between bid and detailed design documents.
+The bid P&ID is a simplified precursor to [[dd_instrument_list]] and the full P&ID. Tag numbers are consistent between bid and detailed design documents.
 
 ## Appears alongside
 
-- [[ro_spec]] — RO unit description submitted with this bid
-- [[instrument_list]] — detailed instrument schedule for the same tag set
+- [[bid_firm_quote]] — RO unit description submitted with this bid
+- [[dd_instrument_list]] — detailed instrument schedule for the same tag set

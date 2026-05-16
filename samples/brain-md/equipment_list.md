@@ -27,5 +27,5 @@ Procurement spreadsheet for instrumentation on the Evoqua M284R RO unit (Electri
 
 ## Cross-references
 
-- [[instrument_list]] — engineering instrument schedule (same tags, technical detail)
+- [[dd_instrument_list]] — engineering instrument schedule (same tags, technical detail)
 - [[process_narrative]] — operational context for each instrument
