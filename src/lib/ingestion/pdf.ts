@@ -1,62 +1,54 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import { PDFDocument } from 'pdf-lib';
-import { isTag, type Tag } from '../tags';
+import { tagRegex } from '../tagRegex';
 
-export type BboxKind = 'symbol' | 'instrument' | 'label' | 'wire';
-
-export type PdfBbox = {
-  page: number;
-  tag: Tag;
-  bbox: [number, number, number, number];
-  kind?: BboxKind;
-  note?: string;
-};
-
-export type PdfPageInfo = {
-  number: number;
-  width: number;
-  height: number;
-};
+export type PdfPageInfo = { number: number; width: number; height: number };
 
 export type PdfDocInfo = {
-  filename: string;
   pages: PdfPageInfo[];
-  bboxes: PdfBbox[];
+  /** Distinct tags found anywhere in the document text layer. */
+  tags: string[];
+  /** Page-keyed text content (best-effort; may be empty if extraction fails). */
+  pageText: Record<number, string>;
 };
 
-export async function loadPdf(samplesDir: string, filename: string): Promise<PdfDocInfo> {
-  const pdfBuf = await readFile(path.join(samplesDir, filename));
-  const pdf = await PDFDocument.load(pdfBuf);
+export async function loadPdf(buf: Buffer): Promise<PdfDocInfo> {
+  const pdf = await PDFDocument.load(new Uint8Array(buf));
   const pages: PdfPageInfo[] = pdf.getPages().map((p, i) => ({
     number: i + 1,
     width: p.getWidth(),
     height: p.getHeight(),
   }));
 
-  const sidecar = path.join(samplesDir, filename.replace(/\.pdf$/, '.bboxes.json'));
-  let bboxes: PdfBbox[] = [];
+  const pageText: Record<number, string> = {};
   try {
-    const raw = await readFile(sidecar, 'utf8');
-    const parsed = JSON.parse(raw) as {
-      pages?: { page: number; tags?: { tag?: string; bbox?: number[]; kind?: BboxKind; note?: string }[] }[];
-    };
-    bboxes = (parsed.pages ?? []).flatMap((pg) =>
-      (pg.tags ?? []).flatMap((entry) => {
-        if (!entry.tag || !isTag(entry.tag)) return [];
-        if (!entry.bbox || entry.bbox.length !== 4) return [];
-        return [{
-          page: pg.page,
-          tag: entry.tag,
-          bbox: entry.bbox as [number, number, number, number],
-          kind: entry.kind,
-          note: entry.note,
-        }];
-      })
-    );
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    // Lazy-load to avoid worker-related side effects in Next bundling.
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const loadingTask = pdfjs.getDocument({
+      data: new Uint8Array(buf),
+      useSystemFonts: true,
+    });
+    const doc = await loadingTask.promise;
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      const text = content.items
+        .map((it) => ('str' in it ? (it as { str: string }).str : ''))
+        .join(' ');
+      pageText[i] = text;
+    }
+  } catch {
+    // Text extraction is best-effort; the doc still uploads.
   }
 
-  return { filename, pages, bboxes };
+  const regex = tagRegex();
+  const tagSet = new Set<string>();
+  for (const text of Object.values(pageText)) {
+    let m: RegExpExecArray | null;
+    regex.lastIndex = 0;
+    while ((m = regex.exec(text)) !== null) {
+      tagSet.add(m[0]);
+    }
+  }
+
+  return { pages, tags: [...tagSet].sort(), pageText };
 }

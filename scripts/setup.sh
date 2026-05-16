@@ -6,9 +6,9 @@
 #   1. Bun (>= 1.3.10) — checked, not auto-installed
 #   2. gbrain CLI       — git-cloned and `bun link`ed if missing
 #   3. PGLite brain     — `gbrain init` if not already initialized
-#   4. Seed content     — `gbrain import samples/brain-md/`
-#   5. Health check     — `gbrain doctor --fast`
+#   4. Health check     — `gbrain doctor --fast`
 #
+# No seed content — the brain starts empty. Pages are pushed on file upload.
 # Re-running is safe; each step skips if already satisfied.
 
 set -euo pipefail
@@ -19,8 +19,6 @@ if [ "${CI:-}" = "1" ] || [ "${VERCEL:-}" = "1" ]; then
   exit 0
 fi
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SEED_DIR="$REPO_ROOT/samples/brain-md"
 GBRAIN_REPO="${GBRAIN_REPO:-https://github.com/garrytan/gbrain.git}"
 GBRAIN_SRC="${GBRAIN_SRC:-$HOME/.cache/kord-brain/gbrain}"
 
@@ -69,17 +67,7 @@ else
   log "gbrain already initialized at ~/.gbrain — skipping init."
 fi
 
-# 4. Seed content --------------------------------------------------------------
-if [ -d "$SEED_DIR" ] && [ -n "$(ls -A "$SEED_DIR" 2>/dev/null)" ]; then
-  log "Importing seed pages from samples/brain-md/..."
-  gbrain import "$SEED_DIR" --no-embed
-  log "Extracting wikilinks..."
-  gbrain extract links --source fs --dir "$SEED_DIR"
-else
-  warn "No seed content at $SEED_DIR — skipping import."
-fi
-
-# 5. Health check --------------------------------------------------------------
+# 4. Health check --------------------------------------------------------------
 log "Running gbrain doctor..."
 gbrain doctor --fast || warn "doctor reported issues — review above."
 

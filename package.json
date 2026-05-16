@@ -8,7 +8,6 @@
     "build": "next build",
     "start": "next start",
     "setup": "bash scripts/setup.sh",
-    "placeholders": "tsx scripts/gen-placeholders.ts",
     "copy-worker": "node scripts/copy-pdf-worker.mjs",
     "postinstall": "node scripts/copy-pdf-worker.mjs && bash scripts/setup.sh"
   },

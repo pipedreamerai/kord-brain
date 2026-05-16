@@ -1,13 +1,22 @@
 'use client';
 
-import { useState } from 'react';
-import { GraphView } from './GraphView';
-import { SeedGate } from './SeedGate';
+import { useEffect, useState } from 'react';
+import { useAppStore } from '@/lib/appStore';
+import { FilesTab } from './FilesTab';
+import { GraphTab } from './GraphTab';
 
-type RootView = 'brain' | 'files';
+type RootView = 'files' | 'graph';
 
 export function AppShell() {
-  const [view, setView] = useState<RootView>('brain');
+  const [view, setView] = useState<RootView>('files');
+  const hydrate = useAppStore((s) => s.hydrate);
+  const docCount = useAppStore((s) => s.docs.length);
+  const graphNodes = useAppStore((s) => s.graph.nodes.length);
+  const graphEdges = useAppStore((s) => s.graph.edges.length);
+
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
 
   return (
     <div className="flex flex-col h-screen">
@@ -17,18 +26,29 @@ export function AppShell() {
           <span className="text-[11px] text-zinc-500">cross-doc engineering reasoning</span>
         </div>
         <nav className="ml-6 flex items-center gap-1">
-          <TabButton label="Brain" active={view === 'brain'} color="emerald" onClick={() => setView('brain')} />
-          <TabButton label="Files" active={view === 'files'} color="blue" onClick={() => setView('files')} />
+          <TabButton
+            label="Files"
+            badge={docCount > 0 ? docCount : undefined}
+            active={view === 'files'}
+            color="blue"
+            onClick={() => setView('files')}
+          />
+          <TabButton
+            label="Graph"
+            badge={graphNodes > 0 ? `${graphNodes}·${graphEdges}` : undefined}
+            active={view === 'graph'}
+            color="emerald"
+            onClick={() => setView('graph')}
+          />
         </nav>
       </header>
 
-      {/* Both views stay mounted so Files state (seeded docs) survives tab switches */}
       <div className="flex-1 min-h-0 relative">
-        <div className={`absolute inset-0 ${view !== 'brain' ? 'hidden' : ''}`}>
-          <GraphView />
-        </div>
         <div className={`absolute inset-0 ${view !== 'files' ? 'hidden' : ''}`}>
-          <SeedGate />
+          <FilesTab />
+        </div>
+        <div className={`absolute inset-0 ${view !== 'graph' ? 'hidden' : ''}`}>
+          <GraphTab />
         </div>
       </div>
     </div>
@@ -37,11 +57,13 @@ export function AppShell() {
 
 function TabButton({
   label,
+  badge,
   active,
   color,
   onClick,
 }: {
   label: string;
+  badge?: string | number;
   active: boolean;
   color: 'emerald' | 'blue';
   onClick: () => void;
@@ -53,11 +75,16 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-1 text-[12px] font-medium rounded transition-colors ${
+      className={`px-3 py-1 text-[12px] font-medium rounded transition-colors flex items-center gap-1.5 ${
         active ? activeClass : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 border border-transparent'
       }`}
     >
       {label}
+      {badge !== undefined && (
+        <span className={`text-[10px] font-mono rounded px-1 ${
+          active ? 'bg-black/30' : 'bg-zinc-800 text-zinc-500'
+        }`}>{badge}</span>
+      )}
     </button>
   );
 }

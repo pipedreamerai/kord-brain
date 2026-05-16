@@ -1,5 +1,6 @@
-// Predev preflight: ensures the gbrain sidecar is ready before starting Next.js.
-// If gbrain is missing or unseeded, runs setup.sh automatically instead of failing.
+// Predev preflight: ensures the gbrain sidecar is reachable before starting Next.js.
+// If the binary is missing, runs setup.sh automatically. An empty brain is fine —
+// content is pushed in on file upload.
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
@@ -21,25 +22,23 @@ function fail(msg) {
   process.exit(1);
 }
 
-function gbrainReady() {
+function gbrainReachable() {
   try {
-    const out = execFileSync('gbrain', ['list', '-n', '1'], {
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).toString();
-    return out.split('\n').some(line => line.trim() && !line.startsWith('[ai.gateway]'));
+    // `stats` succeeds even on an empty brain — that's the right reachability probe.
+    execFileSync('gbrain', ['stats'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    return true;
   } catch {
     return false;
   }
 }
 
-if (!gbrainReady()) {
-  log('gbrain not ready — running setup (this is automatic on first run)...');
+if (!gbrainReachable()) {
+  log('gbrain not reachable — running setup (this is automatic on first run)...');
   const result = spawnSync('bash', [SETUP_SH], { stdio: 'inherit', env });
   if (result.status !== 0) {
     fail('setup.sh failed — review errors above, then re-run: pnpm dev');
   }
-  if (!gbrainReady()) {
-    fail('gbrain still not ready after setup — review errors above.');
+  if (!gbrainReachable()) {
+    fail('gbrain still not reachable after setup — review errors above.');
   }
 }

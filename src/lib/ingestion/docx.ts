@@ -1,39 +1,33 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import mammoth from 'mammoth';
-import { isTag, TAG_REGEX, type Tag } from '../tags';
+import { tagRegex } from '../tagRegex';
 
 export type DocxOccurrence = {
-  tag: Tag;
+  tag: string;
   anchorId: string;
   snippet: string;
 };
 
 export type DocxDocInfo = {
-  filename: string;
   html: string;
   text: string;
+  tags: string[];
   occurrences: DocxOccurrence[];
 };
 
-export async function loadDocx(samplesDir: string, filename: string): Promise<DocxDocInfo> {
-  const buf = await readFile(path.join(samplesDir, filename));
-  // mammoth wants a Buffer in Node; types accept { buffer: Buffer }
+export async function loadDocx(buf: Buffer): Promise<DocxDocInfo> {
   const { value: rawHtml } = await mammoth.convertToHtml({ buffer: buf });
   const { value: text } = await mammoth.extractRawText({ buffer: buf });
 
   const counters: Record<string, number> = {};
   const occurrences: DocxOccurrence[] = [];
+  const regex = tagRegex();
 
-  // Reset regex state because TAG_REGEX is shared (g-flagged)
-  const regex = new RegExp(TAG_REGEX.source, 'g');
-
-  const wrapped = rawHtml.replace(regex, (match, _g1: string, offset: number) => {
-    if (!isTag(match)) return match;
+  const wrapped = rawHtml.replace(regex, (match: string, ...args: unknown[]) => {
     const tag = match;
+    const offset = args[args.length - 2] as number;
     counters[tag] = (counters[tag] ?? 0) + 1;
     const n = counters[tag];
-    const anchorId = `tag-${tag}-${n}`;
+    const anchorId = `tag-${tag.replace(/[^A-Za-z0-9]/g, '_')}-${n}`;
     occurrences.push({
       tag,
       anchorId,
@@ -42,15 +36,13 @@ export async function loadDocx(samplesDir: string, filename: string): Promise<Do
     return `<mark id="${anchorId}" data-tag="${tag}" data-occurrence="${n}" class="kb-tag">${tag}</mark>`;
   });
 
-  return { filename, html: wrapped, text: text.trim(), occurrences };
+  const tags = [...new Set(occurrences.map((o) => o.tag))].sort();
+
+  return { html: wrapped, text: text.trim(), tags, occurrences };
 }
 
 function extractSnippet(html: string, offset: number, radius: number): string {
   const start = Math.max(0, offset - radius);
   const end = Math.min(html.length, offset + radius);
-  return html
-    .slice(start, end)
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return html.slice(start, end).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }

@@ -1,0 +1,52 @@
+{
+  "docs": [
+    {
+      "slug": "process-narrative",
+      "filename": "process_narrative.docx",
+      "displayName": "process_narrative.docx",
+      "kind": "docx",
+      "uploadedAt": 1778969801632,
+      "bytes": 10093,
+      "tags": [
+        "CBV-501",
+        "FT-301",
+        "FT-303",
+        "HV-507",
+        "LIT-501",
+        "LSL-201",
+        "LSL-202",
+        "LSL-203",
+        "PCV-500",
+        "PIT-305",
+        "PIT-312"
+      ]
+    },
+    {
+      "slug": "equipment-list",
+      "filename": "equipment_list.xlsx",
+      "displayName": "equipment_list.xlsx",
+      "kind": "xlsx",
+      "uploadedAt": 1778969809947,
+      "bytes": 19038,
+      "tags": [
+        "FT-301",
+        "FT-302",
+        "FT-303",
+        "HV-507",
+        "LIT-501",
+        "LSL-201",
+        "PIT-305",
+        "PIT-312"
+      ]
+    },
+    {
+      "slug": "rfq",
+      "filename": "RFQ.pdf",
+      "displayName": "RFQ.pdf",
+      "kind": "pdf",
+      "uploadedAt": 1778969816974,
+      "bytes": 697654,
+      "tags": []
+    }
+  ]
+}

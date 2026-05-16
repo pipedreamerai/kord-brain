@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { homedir } from 'node:os';
 
@@ -18,6 +18,37 @@ async function runGbrain(args: string[]): Promise<string> {
     maxBuffer: 16 * 1024 * 1024,
   });
   return stripGatewayNoise(stdout);
+}
+
+/** Write a markdown page (pipes content via stdin to `gbrain put <slug>`). */
+export async function putPage(slug: string, markdown: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(GBRAIN_BIN, ['put', slug], { env: SPAWN_ENV });
+    let stderr = '';
+    child.stderr.on('data', (d) => { stderr += d.toString(); });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`gbrain put ${slug} exited ${code}: ${stderr.slice(0, 300)}`));
+    });
+    child.stdin.end(markdown);
+  });
+}
+
+export async function deletePage(slug: string): Promise<void> {
+  try {
+    await runGbrain(['delete', slug]);
+  } catch {
+    // Ignore — deleting a non-existent page is fine.
+  }
+}
+
+export async function link(from: string, to: string, type = 'mentions'): Promise<void> {
+  try {
+    await runGbrain(['link', from, to, '--type', type]);
+  } catch {
+    // Idempotent best-effort.
+  }
 }
 
 function stripGatewayNoise(s: string): string {

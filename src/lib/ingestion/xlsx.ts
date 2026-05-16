@@ -1,7 +1,5 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import * as XLSX from 'xlsx';
-import { isTag, type Tag } from '../tags';
+import { tagRegex } from '../tagRegex';
 
 export type XlsxSheet = {
   name: string;
@@ -10,21 +8,20 @@ export type XlsxSheet = {
 };
 
 export type XlsxTagRow = {
-  tag: Tag;
+  tag: string;
   sheet: string;
-  rowIndex: number; // 0-based, relative to first data row (after header)
+  rowIndex: number;
   values: string[];
 };
 
 export type XlsxDocInfo = {
-  filename: string;
   sheets: XlsxSheet[];
+  tags: string[];
   tagRows: XlsxTagRow[];
 };
 
-export async function loadXlsx(samplesDir: string, filename: string): Promise<XlsxDocInfo> {
-  const buf = await readFile(path.join(samplesDir, filename));
-  const wb = XLSX.read(buf, { type: 'buffer' });
+export async function loadXlsx(buf: Buffer): Promise<XlsxDocInfo> {
+  const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
 
   const sheets: XlsxSheet[] = wb.SheetNames.map((name) => {
     const ws = wb.Sheets[name];
@@ -38,14 +35,19 @@ export async function loadXlsx(samplesDir: string, filename: string): Promise<Xl
   });
 
   const tagRows: XlsxTagRow[] = [];
+  const tagSet = new Set<string>();
+
   for (const sheet of sheets) {
     sheet.rows.forEach((row, i) => {
-      const first = row[0];
-      if (first && isTag(first)) {
-        tagRows.push({ tag: first, sheet: sheet.name, rowIndex: i, values: row });
-      }
+      const regex = tagRegex();
+      const rowText = row.join(' ');
+      const found = rowText.match(regex);
+      if (!found) return;
+      for (const tag of found) tagSet.add(tag);
+      const firstTag = found[0];
+      tagRows.push({ tag: firstTag, sheet: sheet.name, rowIndex: i, values: row });
     });
   }
 
-  return { filename, sheets, tagRows };
+  return { sheets, tags: [...tagSet].sort(), tagRows };
 }
