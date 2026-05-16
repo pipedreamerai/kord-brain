@@ -2,10 +2,20 @@ import { NextResponse } from 'next/server';
 import * as gbrain from '@/lib/gbrain';
 import type { BrainNode, BrainEdge } from '@/components/FullGbrainGraph';
 
-export async function GET() {
-  const slugs = await gbrain.list(200);
+// gbrain list returns nothing when items are stored as chunks; use known seed slugs as anchors
+const SEED_SLUGS = [
+  'bid_pid', 'bid_firm_quote', 'dd_instrument_list', 'equipment_list', 'process_narrative',
+  'ft-301', 'ft-302', 'ft-303', 'pit-305', 'pit-312', 'lsl-201', 'lit-501', 'hv-507',
+];
 
-  const graphResults = await Promise.all(slugs.map((s) => gbrain.graph(s, 1)));
+export async function GET() {
+  let slugs = await gbrain.list(200);
+  if (slugs.length === 0) slugs = SEED_SLUGS;
+
+  const graphResults: Awaited<ReturnType<typeof gbrain.graph>>[] = [];
+  for (const s of slugs) {
+    graphResults.push(await gbrain.graph(s, 1).catch(() => []));
+  }
 
   const nodeMap = new Map<string, BrainNode>();
   const edgeSet = new Set<string>();

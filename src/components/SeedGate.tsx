@@ -31,7 +31,7 @@ export function SeedGate() {
 
   if (phase === 'loading') {
     return (
-      <div className="flex h-screen items-center justify-center bg-zinc-950">
+      <div className="flex h-full items-center justify-center bg-zinc-950">
         <span className="text-zinc-500 text-sm font-mono animate-pulse">Loading demo…</span>
       </div>
     );

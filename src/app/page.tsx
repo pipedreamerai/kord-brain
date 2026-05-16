@@ -1,5 +1,5 @@
-import { SeedGate } from '@/components/SeedGate';
+import { AppShell } from '@/components/AppShell';
 
 export default function Home() {
-  return <SeedGate />;
+  return <AppShell />;
 }

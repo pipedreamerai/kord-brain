@@ -37,9 +37,11 @@ export async function GET() {
         if (slugs.length === 0) slugs = FALLBACK_SLUGS;
         emit({ type: 'slugs_found', count: slugs.length });
 
-        // ── Phase 3: Fetch page content in parallel, emit sequentially ────────
-        const pagePromises = slugs.map(s => getPage(s).catch(() => null));
-        const pages = await Promise.all(pagePromises);
+        // ── Phase 3: Fetch page content serially (PGLite is single-process) ──
+        const pages: (Awaited<ReturnType<typeof getPage>>)[] = [];
+        for (const s of slugs) {
+          pages.push(await getPage(s).catch(() => null));
+        }
 
         const knownNodes = new Map<string, { slug: string; title: string; kind: string }>();
 
@@ -52,10 +54,12 @@ export async function GET() {
           await delay(50);
         }
 
-        // ── Phase 4: Build graph edges ────────────────────────────────────────
+        // ── Phase 4: Build graph edges (serially — PGLite is single-process) ──
         emit({ type: 'phase', label: 'Tracing edges…' });
-        const graphPromises = slugs.map(s => graph(s, 1).catch(() => []));
-        const graphResults = await Promise.all(graphPromises);
+        const graphResults: Awaited<ReturnType<typeof graph>>[] = [];
+        for (const s of slugs) {
+          graphResults.push(await graph(s, 1).catch(() => []));
+        }
 
         const seenEdges = new Set<string>();
 

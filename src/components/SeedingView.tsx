@@ -101,17 +101,12 @@ export function SeedingView({ onComplete }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100">
-      {/* Header */}
-      <header className="shrink-0 px-6 py-3 border-b border-zinc-800 flex items-center gap-3">
-        <span className="font-semibold text-white tracking-tight">kord-brain</span>
-        <span className="text-zinc-600 text-[11px]">cross-doc engineering reasoning</span>
-        {phaseLabel && (
-          <span className="ml-auto text-[11px] text-emerald-400 font-mono animate-pulse">
-            {phaseLabel}
-          </span>
-        )}
-      </header>
+    <div className="flex flex-col h-full bg-zinc-950 text-zinc-100">
+      {phaseLabel && (
+        <div className="shrink-0 px-6 py-2 border-b border-zinc-800 text-[11px] text-emerald-400 font-mono animate-pulse">
+          {phaseLabel}
+        </div>
+      )}
 
       {/* Body */}
       <div className="flex flex-1 min-h-0">
@@ -232,7 +227,7 @@ export function SeedingView({ onComplete }: Props) {
 
 function Landing({ onSeed }: { onSeed: () => void }) {
   return (
-    <div className="flex flex-col h-screen bg-zinc-950 items-center justify-center">
+    <div className="flex flex-col h-full bg-zinc-950 items-center justify-center">
       <div className="w-full max-w-sm text-center px-6">
         <p className="text-zinc-600 text-[11px] font-mono uppercase tracking-widest mb-2">
           kord-brain
