@@ -38,7 +38,9 @@ yarn-error.log*
 
 # claude worktrees (created by wt.sh)
 .claude/worktrees/
+.worktree-port
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.env*.local
