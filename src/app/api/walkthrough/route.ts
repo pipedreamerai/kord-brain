@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 
   if (!process.env.AI_GATEWAY_API_KEY) {
     return NextResponse.json(
-      { error: 'AI_GATEWAY_API_KEY not set. Copy .env.example to .env.local and fill it in.' },
+      { error: 'AI_GATEWAY_API_KEY not set. Run `vercel env pull` to populate .env.local.' },
       { status: 500 },
     );
   }
