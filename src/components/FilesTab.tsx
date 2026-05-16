@@ -5,7 +5,6 @@ import { useAppStore, type UploadedDoc } from '@/lib/appStore';
 import { PdfViewer } from './PdfViewer';
 import { DocxViewer } from './DocxViewer';
 import { XlsxViewer } from './XlsxViewer';
-import { ChatPanel } from './ChatPanel';
 
 export function FilesTab() {
   const docs = useAppStore((s) => s.docs);
@@ -43,12 +42,7 @@ export function FilesTab() {
       />
 
       {empty ? (
-        <>
-          <main className="flex-1 min-w-0 flex">
-            <EmptyState onUpload={openPicker} uploading={uploading} error={uploadError} />
-          </main>
-          <ChatPanel />
-        </>
+        <EmptyState onUpload={openPicker} uploading={uploading} error={uploadError} />
       ) : (
         <>
           <aside className="w-72 shrink-0 border-r border-zinc-800 flex flex-col">
@@ -95,8 +89,6 @@ export function FilesTab() {
               </div>
             )}
           </main>
-
-          <ChatPanel />
         </>
       )}
     </div>
