@@ -62,15 +62,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   hydrate: async () => {
     if (get().hydrated) return;
     try {
-      const [docsRes, graphRes] = await Promise.all([
-        fetch('/api/uploads'),
-        fetch('/api/graph'),
-      ]);
-      const docsData = docsRes.ok ? await docsRes.json() : { docs: [] };
-      const graphData = graphRes.ok ? await graphRes.json() : EMPTY_GRAPH;
+      await fetch('/api/reset', { method: 'POST' });
       set({
-        docs: docsData.docs ?? [],
-        graph: graphData,
+        docs: [],
+        graph: EMPTY_GRAPH,
         hydrated: true,
       });
     } catch (err) {

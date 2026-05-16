@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, readdir, stat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, readdir, stat, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { loadPdf, type PdfPageInfo } from './ingestion/pdf';
 import { loadDocx } from './ingestion/docx';
@@ -239,6 +239,36 @@ export async function getTagIndex(): Promise<TagIndex> {
 
 export async function readUploadedFile(filename: string): Promise<Buffer> {
   return readFile(path.join(UPLOADS_DIR, filename));
+}
+
+export async function nukeAll(): Promise<{ pagesDeleted: number; filesDeleted: number }> {
+  const meta = await loadMeta();
+  const slugs = new Set<string>();
+  for (const d of meta.docs) {
+    slugs.add(d.slug);
+    for (const t of d.tags) slugs.add(tagToSlug(t));
+  }
+
+  let pagesDeleted = 0;
+  for (const slug of slugs) {
+    await gbrain.deletePage(slug);
+    pagesDeleted += 1;
+  }
+
+  let filesDeleted = 0;
+  try {
+    const names = await readdir(UPLOADS_DIR);
+    for (const n of names) {
+      await rm(path.join(UPLOADS_DIR, n), { force: true });
+      filesDeleted += 1;
+    }
+  } catch {
+    // Dir doesn't exist — nothing to wipe.
+  }
+
+  cache = new Map();
+  cacheLoaded = true;
+  return { pagesDeleted, filesDeleted };
 }
 
 export async function scanUploadsDir(): Promise<string[]> {
