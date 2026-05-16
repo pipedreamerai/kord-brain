@@ -16,6 +16,8 @@ export function ChatPanel() {
   const [input, setInput] = useState('');
   const [collapsed, setCollapsed] = useState<boolean>(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const stickRef = useRef<boolean>(true);
 
   useEffect(() => {
     try {
@@ -49,10 +51,24 @@ export function ChatPanel() {
 
   const busy = status === 'submitted' || status === 'streaming';
 
+  useEffect(() => {
+    if (collapsed || !stickRef.current) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages, status, collapsed]);
+
+  function onScroll(e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickRef.current = distance < 24;
+  }
+
   function submit() {
     const text = input.trim();
     if (!text || busy) return;
     setInput('');
+    stickRef.current = true;
     void sendMessage({ text });
     taRef.current?.focus();
   }
@@ -99,7 +115,11 @@ export function ChatPanel() {
 
       {!collapsed && (
         <div className="flex-1 min-h-0 flex">
-          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 min-h-0 min-w-0">
+          <div
+            ref={scrollRef}
+            onScroll={onScroll}
+            className="flex-1 overflow-y-auto px-3 py-3 space-y-3 min-h-0 min-w-0"
+          >
             {messages.length === 0 && <EmptyHint />}
             {messages.map((m) => (
               <MessageView key={m.id} message={m} />
