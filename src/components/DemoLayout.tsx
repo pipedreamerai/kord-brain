@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useDemoStore } from '@/lib/store';
 import { docBySlug } from '@/lib/docs';
 import type { Tag } from '@/lib/tags';
@@ -11,6 +11,7 @@ import { DocxViewer } from './DocxViewer';
 import { XlsxViewer } from './XlsxViewer';
 import { TagsSidebar } from './TagsSidebar';
 import { WalkthroughPanel } from './WalkthroughPanel';
+import { GraphView } from './GraphView';
 
 type Props = {
   tagIndex: TagIndex;
@@ -18,6 +19,7 @@ type Props = {
 };
 
 export function DemoLayout({ tagIndex, docs }: Props) {
+  const [mainView, setMainView] = useState<'docs' | 'graph'>('docs');
   const activeDoc = useDemoStore((s) => s.activeDoc);
   const highlights = useDemoStore((s) => s.highlights);
   const selectTag = useDemoStore((s) => s.selectTag);
@@ -84,32 +86,40 @@ export function DemoLayout({ tagIndex, docs }: Props) {
         </aside>
 
         <main className="flex-1 flex flex-col min-w-0">
-          <DocTabs />
+          <DocTabs mainView={mainView} onViewChange={setMainView} />
           <div className="flex-1 overflow-auto bg-zinc-100">
-            {activeMeta.kind === 'pdf' && activePayload?.kind === 'pdf' && (
-              <PdfViewer
-                url={`/samples/${activeMeta.filename}`}
-                bboxes={activePdfBboxes}
-                highlightedTags={activeHighlightedTags}
-                onTagClick={handleTagClick}
-              />
-            )}
-            {activeMeta.kind === 'docx' && activePayload?.kind === 'docx' && (
-              <DocxViewer
-                html={activePayload.html}
-                highlightedAnchors={activeHighlightedAnchors}
-                onTagClick={handleTagClick}
-              />
-            )}
-            {activeMeta.kind === 'xlsx' && activePayload?.kind === 'xlsx' && (
-              <XlsxViewer
-                sheets={activePayload.sheets}
-                highlightedTags={activeHighlightedTags}
-                onTagClick={handleTagClick}
-              />
-            )}
-            {!activePayload && (
-              <div className="p-8 text-sm text-zinc-500">No payload loaded for {activeMeta.displayName}.</div>
+            {mainView === 'graph' ? (
+              <div className="h-full">
+                <GraphView />
+              </div>
+            ) : (
+              <>
+                {activeMeta.kind === 'pdf' && activePayload?.kind === 'pdf' && (
+                  <PdfViewer
+                    url={`/samples/${activeMeta.filename}`}
+                    bboxes={activePdfBboxes}
+                    highlightedTags={activeHighlightedTags}
+                    onTagClick={handleTagClick}
+                  />
+                )}
+                {activeMeta.kind === 'docx' && activePayload?.kind === 'docx' && (
+                  <DocxViewer
+                    html={activePayload.html}
+                    highlightedAnchors={activeHighlightedAnchors}
+                    onTagClick={handleTagClick}
+                  />
+                )}
+                {activeMeta.kind === 'xlsx' && activePayload?.kind === 'xlsx' && (
+                  <XlsxViewer
+                    sheets={activePayload.sheets}
+                    highlightedTags={activeHighlightedTags}
+                    onTagClick={handleTagClick}
+                  />
+                )}
+                {!activePayload && (
+                  <div className="p-8 text-sm text-zinc-500">No payload loaded for {activeMeta.displayName}.</div>
+                )}
+              </>
             )}
           </div>
         </main>
