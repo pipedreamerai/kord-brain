@@ -340,7 +340,22 @@ text streams, citations land in the viewer.
 
 None blocking. Implementation may discover:
 
-- Exact `Agent` response/stream API in installed `ai@6.0.182` — confirm from
-  types.
+- ~~Exact `Agent` response/stream API in installed `ai@6.0.182`~~ — **resolved
+  during eng review.** Class is `Experimental_Agent` (alias of `ToolLoopAgent`).
+  System prompt uses `instructions:`, not `system:`. Route uses
+  `createAgentUIStreamResponse({ agent, uiMessages })`.
 - Whether `@ai-sdk/react@2` is the right major against `ai@6` — confirm from
   the AI SDK v6 release notes.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAN | 2 issues found, 2 resolved |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+**UNRESOLVED:** 0
+**VERDICT:** ENG CLEARED — ready to implement
