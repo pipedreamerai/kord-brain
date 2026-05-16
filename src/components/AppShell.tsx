@@ -41,12 +41,14 @@ export function AppShell() {
         </div>
       </header>
 
-      <div className="flex-1 min-h-0 flex">
-        <div className="flex-1 min-w-0">
-          <FilesTab />
-        </div>
-        <div className="w-[34%] min-w-[320px] border-l border-zinc-800">
-          <GraphTab />
+      <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 flex">
+          <div className="flex-1 min-w-0">
+            <FilesTab />
+          </div>
+          <div className="w-[28%] min-w-[300px] border-l border-zinc-800">
+            <GraphTab />
+          </div>
         </div>
         <ChatPanel />
       </div>

@@ -34,8 +34,6 @@ type GNode = BrainNode & {
 };
 type GLink = { source: string; target: string; kind: string };
 
-const BRAIN_ID = '__brain__';
-
 const SHELL_R = {
   document: 60,
   tag: 110,
@@ -62,19 +60,16 @@ function fibonacciSphere(n: number, radius: number, seed = 0): { x: number; y: n
 const COLORS = {
   document: '#818cf8',
   tag: '#fbbf24',
-  root: '#10b981',
   other: '#a1a1aa',
 } as const;
 
 function colorFor(kind: string): string {
   if (kind === 'document') return COLORS.document;
   if (kind === 'tag') return COLORS.tag;
-  if (kind === 'root') return COLORS.root;
   return COLORS.other;
 }
 
 function sizeFor(kind: string): number {
-  if (kind === 'root') return 9;
   if (kind === 'document') return 6;
   if (kind === 'tag') return 5;
   return 4;
@@ -127,24 +122,6 @@ export function FullGbrainGraph({ nodes, edges }: Props) {
       .filter((e) => ids.has(e.from) && ids.has(e.to))
       .map((e) => ({ source: e.from, target: e.to, kind: e.kind }));
 
-    if (gnodes.length > 0) {
-      gnodes.push({
-        slug: BRAIN_ID,
-        title: 'brain',
-        kind: 'root',
-        id: BRAIN_ID,
-        label: 'brain',
-        color: colorFor('root'),
-        size: sizeFor('root'),
-        fx: 0,
-        fy: 0,
-        fz: 0,
-      });
-      for (const n of docs) {
-        glinks.push({ source: BRAIN_ID, target: n.slug, kind: 'root' });
-      }
-    }
-
     return { nodes: gnodes, links: glinks };
   }, [nodes, edges]);
 
@@ -192,41 +169,23 @@ export function FullGbrainGraph({ nodes, edges }: Props) {
           }}
           nodeThreeObject={(n: unknown) => {
             const node = n as GNode;
-            const isBrain = node.id === BRAIN_ID;
             const group = new THREE.Group();
             const geo = new THREE.SphereGeometry(node.size, 24, 24);
             const mat = new THREE.MeshStandardMaterial({
               color: node.color,
               emissive: node.color,
-              emissiveIntensity: isBrain ? 0.9 : 0.45,
+              emissiveIntensity: 0.45,
               roughness: 0.35,
               metalness: 0.15,
             });
-            const mesh = new THREE.Mesh(geo, mat);
-            group.add(mesh);
+            group.add(new THREE.Mesh(geo, mat));
 
             const glowMat = new THREE.MeshBasicMaterial({
               color: node.color,
               transparent: true,
-              opacity: isBrain ? 0.32 : 0.18,
+              opacity: 0.18,
             });
-            const glow = new THREE.Mesh(
-              new THREE.SphereGeometry(node.size * (isBrain ? 2.4 : 1.8), 16, 16),
-              glowMat,
-            );
-            group.add(glow);
-
-            if (isBrain) {
-              const outerGlow = new THREE.Mesh(
-                new THREE.SphereGeometry(node.size * 4, 16, 16),
-                new THREE.MeshBasicMaterial({
-                  color: node.color,
-                  transparent: true,
-                  opacity: 0.07,
-                }),
-              );
-              group.add(outerGlow);
-            }
+            group.add(new THREE.Mesh(new THREE.SphereGeometry(node.size * 1.8, 16, 16), glowMat));
 
             return group;
           }}
@@ -262,10 +221,6 @@ export function FullGbrainGraph({ nodes, edges }: Props) {
         <div className="flex items-center gap-1.5">
           <span className="inline-block w-2 h-2 rounded-full" style={{ background: COLORS.tag }} />
           <span>tag</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="inline-block w-2 h-2 rounded-full" style={{ background: COLORS.root }} />
-          <span>brain</span>
         </div>
       </div>
 
