@@ -85,15 +85,19 @@ The `qaAgent` instance and its tool definitions. Calls into the existing
 `src/lib/gbrain.ts` client; does not shell out to the CLI directly.
 
 ```ts
-import { Agent, stepCountIs, tool } from 'ai';
+import { Experimental_Agent as Agent, stepCountIs, tool } from 'ai';
 import { gateway } from '@ai-sdk/gateway';
 import { z } from 'zod';
 import * as gbrain from '@/lib/gbrain';
 
+// API confirmed against ai@6.0.182 types:
+//   - The exported class is `Experimental_Agent` (alias for `ToolLoopAgent`).
+//     The bare `Agent` symbol is an interface, not a constructor.
+//   - The system-prompt field is `instructions`, not `system`.
 export const qaAgent = new Agent({
   model: gateway('anthropic/claude-opus-4-7'),
   stopWhen: stepCountIs(8),
-  system: `You answer engineering questions against a knowledge graph (gbrain)
+  instructions: `You answer engineering questions against a knowledge graph (gbrain)
 of cross-document tags (equipment, instruments, motors, breakers).
 
 Rules:
@@ -102,6 +106,9 @@ Rules:
 - Pull pages with get_page and follow neighbors with traverse_graph as needed.
 - Cite every claim by tag slug. If you can't ground a claim in a fetched page,
   say so explicitly instead of inventing.
+- If tool calls keep returning errors, stop and tell the user "I can't reach
+  the knowledge graph right now." Do not guess from the question — saying you
+  don't know is better than inventing an answer.
 - Keep answers tight: 2–4 sentences, then a "Cites:" line listing the tag
   slugs you actually used.`,
   tools: {
@@ -149,20 +156,25 @@ Thin Next.js POST endpoint. Hands the request body to the agent and returns
 the UI message stream.
 
 ```ts
+import { createAgentUIStreamResponse } from 'ai';
 import { qaAgent } from '@/lib/agents/qa';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
-  return qaAgent.respond({ request: req });
+  const { messages } = await req.json();
+  return createAgentUIStreamResponse({
+    agent: qaAgent,
+    uiMessages: messages,
+  });
 }
 ```
 
-(Exact API name pending — `Agent#respond({ request })` vs
-`Agent#stream(...).toUIMessageStreamResponse()`. Confirm against installed
-`ai@^6.0.182` types during implementation. Either way, the route stays a
-one-liner.)
+`createAgentUIStreamResponse` (exported from `ai`) is the v6 idiom: takes the
+agent + the `UIMessage[]` from `useChat`, returns `Promise<Response>` with
+the streaming protocol `useChat` expects on the client side. No manual
+wiring of `.stream(...).toUIMessageStreamResponse()`.
 
 ### 3. `src/components/ChatPanel.tsx` (new)
 
@@ -296,6 +308,8 @@ Smoke tests (each is a chat turn against a seeded brain):
 5. Open `pid.pdf` then ask about P-101 → verify PDF highlights are empty
    (bboxes file not present) but DOCX/XLSX (if those open) highlight cited
    tags.
+6. "What entities does the brain know about?" → expects `list_pages()`,
+   answer enumerates current slugs. Exercises the universe-discovery tool.
 
 Each smoke test is a manual click-through. Pass criteria: tool chips render,
 text streams, citations land in the viewer.
@@ -304,7 +318,7 @@ text streams, citations land in the viewer.
 
 | Risk | Mitigation |
 |------|------------|
-| AI SDK v6 `Agent` API surface differs from what's documented | Implementation step starts by reading the installed package's `.d.ts` files; route handler stays a one-liner so adapting is cheap. |
+| ~~AI SDK v6 `Agent` API surface differs from what's documented~~ | RESOLVED in spec — confirmed `Experimental_Agent`, `instructions` field, and `createAgentUIStreamResponse` against installed `ai@6.0.182` types. |
 | `useChat` (v6) parts-streaming UX differs in subtle ways from v5 | Build ChatPanel against installed types; iterate on chip rendering against a real stream early. |
 | gbrain CLI shell-out is slow per tool call (~100ms × 8 steps = noticeable) | Acceptable for demo. If it bites, batch in a single tool call (e.g. `get_context(slug)` that returns root + neighbors in one shot) — `getRelatedContext()` already exists in gbrain.ts. |
 | Model invents tags despite the rules | Cited-tag intersection drops them before highlight; user just sees fewer highlights, not wrong ones. |
