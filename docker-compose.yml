@@ -14,6 +14,19 @@ services:
     env_file:
       - path: .env.local
         required: false
+    environment:
+      KORD_PDF_EXTRACTOR_URL: http://pdf-extractor:8000
+    depends_on:
+      pdf-extractor:
+        condition: service_healthy
+    restart: unless-stopped
+
+  pdf-extractor:
+    build:
+      context: ./services/pdf-extractor
+    ports:
+      # Exposed for host-mode `pnpm dev` to reach the sidecar at localhost:8765.
+      - "8765:8000"
     restart: unless-stopped
 
 volumes:

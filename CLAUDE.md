@@ -27,6 +27,11 @@ Server (Next.js route handlers, Node runtime)
 
 gbrain CLI sidecar (Bun, PGLite at ~/.gbrain/brain.pglite)
   └─ shelled out from src/lib/gbrain.ts via child_process.execFile
+
+pdf-extractor sidecar (Python + FastAPI + PyMuPDF + Tesseract, Docker)
+  └─ HTTP POST from src/lib/ingestion/pdf-extractor-client.ts → :8765/extract
+     returns per-page text + word bboxes + vector-path counts; falls back to
+     Tesseract OCR inside the container for raster-only pages.
 ```
 
 **No DB in this repo.** All persistence is (a) files in `./uploads/` + `.meta.json`, and (b) gbrain's PGLite store outside the repo. `appStore.hydrate()` POSTs `/api/reset` on mount — the demo always starts empty.
@@ -36,7 +41,8 @@ gbrain CLI sidecar (Bun, PGLite at ~/.gbrain/brain.pglite)
 - `src/lib/gbrain.ts` — typed wrapper around the `gbrain` CLI (`putPage`, `deletePage`, `link`, `graph`, `backlinks`, `search`, `getPage`, `list`, `stats`). Sets `PATH=$HOME/.bun/bin:$PATH` because `gbrain` has a `#!/usr/bin/env bun` shebang.
 - `src/lib/uploads.ts` — ingest pipeline. `ingestUpload()` parses the file, extracts tags via `tagRegex.ts`, then calls `pushToGbrain()` to write the doc page + upsert each tag page + link them. `deleteUpload()` rewrites tag pages so dangling mentions don't linger.
 - `src/lib/tagRegex.ts` — the generic engineering-tag pattern (`P-101`, `AE/TE-301`, etc). No whitelist — discovered from whatever is uploaded.
-- `src/lib/ingestion/{pdf,docx,xlsx}.ts` — per-format parsing; each returns `{ payload, tags }`.
+- `src/lib/ingestion/{pdf,docx,xlsx}.ts` — per-format parsing; each returns `{ payload, tags }`. PDFs go through the pdf-extractor sidecar via `pdf-extractor-client.ts` — no in-process PDF parsing and no Claude-vision upload.
+- `services/pdf-extractor/` — Python FastAPI + PyMuPDF + Tesseract sidecar. `POST /extract` returns `{pages: [{number, width, height, text, spans: [{text, bbox}], vector_paths, source}]}`. Built and run via `docker compose up -d pdf-extractor`.
 - `src/lib/appStore.ts` — Zustand store. `uploadFiles` POSTs the form, then calls `refreshGraph` to re-fetch `/api/graph`.
 - `src/app/api/graph/route.ts` — walks every seed slug (docs + tags + whatever `gbrain list` returns) at depth 1 and dedupes into `{nodes, edges}` for the SVG.
 - `src/components/FullGbrainGraph.tsx` — pure SVG renderer; docs on inner ring, tags on outer ring, animated brain in the center.
@@ -54,9 +60,10 @@ Keep tools mapped 1:1 to gbrain commands. The whole point is that the LLM doesn'
 ## Setup quirks
 
 - `pnpm install` runs `scripts/setup.sh` which installs Bun, `git clone + bun link`s gbrain, and runs `gbrain init` (PGLite, no Postgres). CI/Vercel builds skip it via `CI=1` / `VERCEL=1` guards.
-- Dev server: `pnpm dev` (port from `.worktree-port`, default 3002).
-- Env: `AI_GATEWAY_API_KEY` in `.env.local` is the Vercel AI Gateway key — use it for the chat route.
+- Dev server: `pnpm dev` (port from `.worktree-port`, default 3002). `predev` runs `scripts/preflight.mjs` which checks gbrain reachability AND `http://localhost:8765/healthz`; if the pdf-extractor sidecar is down it runs `docker compose up -d --build pdf-extractor` automatically.
+- Env: `AI_GATEWAY_API_KEY` in `.env.local` is the Vercel AI Gateway key — use it for the chat route. `KORD_PDF_EXTRACTOR_URL` overrides the sidecar URL (default `http://localhost:8765`).
 - `gbrain` must be on PATH for the Node server to find it. The wrapper prepends `~/.bun/bin` defensively; if it still can't find gbrain, the symptom is a 500 from `/api/uploads` on the very first upload.
+- `docker` must be installed for the pdf-extractor sidecar. Without it, PDF uploads fail; DOCX/XLSX still work.
 
 ## Conventions
 
