@@ -1,121 +1,125 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import { DOCS, TAG_DESCRIPTIONS, TAG_APPEARS_IN, docBySlug } from './docs';
+import { DOCS, TAG_DESCRIPTIONS, TAG_APPEARS_IN, docBySlug, type DocSlug } from './docs';
 import type { Tag } from './tags';
-import { getTagIndex } from './tagIndex';
+import { getPage, graph, backlinks, type Page, type GraphNode } from './gbrain';
+
+export type GbrainNeighbor = {
+  slug: string;
+  kind: 'tag' | 'document' | 'unknown';
+  page: Page;
+};
 
 export type WalkthroughContext = {
   tag: Tag;
-  tagSummary: string;
-  pidStructure: string;
-  electricalStructure: string;
-  equipmentListJson: string;
-  narrativeText: string;
-  motorSpecText: string;
+  rootSlug: string;
+  rootPage: Page;
+  neighbors: GbrainNeighbor[];
+  graph: GraphNode[];
+  incoming: { from_slug: string; context: string }[];
 };
 
-const samplesDir = path.resolve(process.cwd(), 'samples');
+function tagToSlug(tag: Tag): string {
+  return tag.toLowerCase();
+}
 
-function describeBboxFile(raw: string, label: string): string {
-  const parsed = JSON.parse(raw) as {
-    pages?: { page: number; tags?: { tag: string; note?: string; kind?: string }[] }[];
-  };
-  const lines: string[] = [`${label} elements:`];
-  for (const pg of parsed.pages ?? []) {
-    for (const t of pg.tags ?? []) {
-      const note = t.note ? ` — ${t.note}` : '';
-      const kind = t.kind ? ` (${t.kind})` : '';
-      lines.push(`  - ${t.tag}${kind}${note}`);
-    }
-  }
-  return lines.join('\n');
+function classify(slug: string): GbrainNeighbor['kind'] {
+  if ((DOCS as readonly { slug: string }[]).some((d) => d.slug === slug)) return 'document';
+  if (/^[a-z]+-\d+$/.test(slug)) return 'tag';
+  return 'unknown';
 }
 
 export async function buildWalkthroughContext(tag: Tag): Promise<WalkthroughContext> {
-  const { tagIndex, docs } = await getTagIndex();
+  const rootSlug = tagToSlug(tag);
 
-  const tagSummaryLines = Object.entries(tagIndex).map(([t, locs]) => {
-    const slugs = Array.from(new Set(locs.map((l) => l.slug))).map(
-      (slug) => docBySlug(slug).displayName,
-    );
-    return `  - ${t} (${TAG_DESCRIPTIONS[t as Tag]}): appears in ${slugs.join(', ') || '(none)'}`;
-  });
-  const tagSummary = ['Tag schema and where each tag appears:', ...tagSummaryLines].join('\n');
+  const [graphData, incomingRaw] = await Promise.all([
+    graph(rootSlug, 1),
+    backlinks(rootSlug),
+  ]);
 
-  const pidRaw = await readFile(path.join(samplesDir, 'pid.bboxes.json'), 'utf8');
-  const electricalRaw = await readFile(path.join(samplesDir, 'electrical.bboxes.json'), 'utf8');
-  const pidStructure = describeBboxFile(pidRaw, 'P&ID');
-  const electricalStructure = describeBboxFile(electricalRaw, 'Electrical single-line');
+  const neighborSlugs = new Set<string>();
+  for (const node of graphData) {
+    if (node.depth === 0) continue;
+    if (node.slug === rootSlug) continue;
+    neighborSlugs.add(node.slug);
+  }
+  for (const b of incomingRaw) {
+    if (b.from_slug !== rootSlug) neighborSlugs.add(b.from_slug);
+  }
 
-  const xlsx = docs.equipment_list;
-  const equipmentListJson =
-    xlsx?.kind === 'xlsx'
-      ? JSON.stringify(
-          xlsx.sheets.map((s) => ({
-            sheet: s.name,
-            header: s.header,
-            rows: s.rows,
-          })),
-          null,
-          2,
-        )
-      : '(equipment list unavailable)';
+  const [rootPage, ...neighborPages] = await Promise.all([
+    getPage(rootSlug),
+    ...Array.from(neighborSlugs).map((s) => getPage(s)),
+  ]);
 
-  const narrative = docs.process_narrative;
-  const narrativeText =
-    narrative?.kind === 'docx' ? narrative.text : '(process narrative unavailable)';
+  const neighbors: GbrainNeighbor[] = Array.from(neighborSlugs).map((slug, i) => ({
+    slug,
+    kind: classify(slug),
+    page: neighborPages[i],
+  }));
 
-  const motorSpec = docs.motor_spec;
-  const motorSpecText =
-    motorSpec?.kind === 'docx' ? motorSpec.text : '(motor spec unavailable)';
+  const incoming = incomingRaw.map((b) => ({ from_slug: b.from_slug, context: b.context }));
 
-  return {
-    tag,
-    tagSummary,
-    pidStructure,
-    electricalStructure,
-    equipmentListJson,
-    narrativeText,
-    motorSpecText,
-  };
+  return { tag, rootSlug, rootPage, neighbors, graph: graphData, incoming };
 }
 
 export function buildPrompt(ctx: WalkthroughContext): string {
-  const docList = DOCS.map((d) => `  - ${d.slug} ("${d.displayName}", ${d.kind})`).join('\n');
   const appearsIn = TAG_APPEARS_IN[ctx.tag]
     .map((s) => docBySlug(s).displayName)
     .join(', ');
 
+  const docList = DOCS.map(
+    (d) => `  - ${d.slug} ("${d.displayName}", ${d.kind})`,
+  ).join('\n');
+
+  const graphSummary = ctx.graph
+    .filter((n) => n.depth === 0)
+    .flatMap((n) =>
+      n.links.map((l) => `  - ${n.slug} → ${l.to_slug} (${l.link_type})`),
+    )
+    .join('\n');
+
+  const neighborSections = ctx.neighbors
+    .map((nb) => {
+      const header = nb.kind === 'document'
+        ? `=== Connected document: ${nb.slug} (gbrain slug) ===`
+        : `=== Connected component: ${nb.slug} ===`;
+      const fm = nb.page.frontmatter.title ? `Title: ${nb.page.frontmatter.title}\n` : '';
+      return `${header}\n${fm}${nb.page.markdown}`;
+    })
+    .join('\n\n');
+
+  const backlinkLine = ctx.incoming.length
+    ? `Backlinks (pages that mention ${ctx.rootSlug}): ${Array.from(new Set(ctx.incoming.map((b) => b.from_slug))).join(', ')}`
+    : 'Backlinks: (none)';
+
   return [
     `You are a senior process/electrical engineer walking a colleague through component ${ctx.tag} (${TAG_DESCRIPTIONS[ctx.tag]}) across a multi-document engineering package for a hydrogen feedwater skid.`,
+    ``,
+    `The context below was selected by gbrain (a knowledge-graph engine). gbrain ingested the raw engineering docs, extracted entity wiki-links, and returned the subgraph reachable from ${ctx.rootSlug}. The LLM only sees what gbrain says is connected.`,
     ``,
     `Produce a tight 4–6 beat walkthrough. Each beat is one short, declarative sentence (≤ 30 words) that advances the explanation. The walkthrough must jump across documents — the value is showing how ${ctx.tag} connects content scattered in different files (${appearsIn}).`,
     ``,
     `Hard rules:`,
     `- Every beat must include 1–3 highlights. Each highlight names a tag AND the doc slug where that tag should light up.`,
-    `- ONLY use tags and doc slugs from the lists below. Never invent tags. Never reference a (tag, doc) pair that isn't listed in "Tag schema".`,
+    `- ONLY use tags and doc slugs from the lists below. Never invent tags. Never reference a (tag, doc) pair that isn't supported by the gbrain context.`,
     `- Highlights for beat N must include ${ctx.tag} unless the beat is explicitly about a downstream/upstream component.`,
     `- Lead with the click target (${ctx.tag}) in beat 1. End with something demo-worthy — e.g. a procurement risk or interlock condition.`,
-    `- Stay strictly inside what the source documents say. If you don't know a value, omit it; do not invent specs.`,
+    `- Stay strictly inside what the gbrain pages below say. If you don't know a value, omit it; do not invent specs.`,
     ``,
-    `Documents available:`,
+    `Documents available (use these doc slugs in highlights):`,
     docList,
     ``,
-    ctx.tagSummary,
+    `=== Graph (1-hop edges from ${ctx.rootSlug}) ===`,
+    graphSummary || '  (no edges)',
     ``,
-    ctx.pidStructure,
+    backlinkLine,
     ``,
-    ctx.electricalStructure,
+    `=== Root page (gbrain slug: ${ctx.rootSlug}) ===`,
+    ctx.rootPage.markdown,
     ``,
-    `=== Equipment list (xlsx, doc slug: equipment_list) ===`,
-    ctx.equipmentListJson,
-    ``,
-    `=== Process narrative (docx, doc slug: process_narrative) ===`,
-    ctx.narrativeText,
-    ``,
-    `=== Motor spec (docx, doc slug: motor_spec) ===`,
-    ctx.motorSpecText,
+    neighborSections,
     ``,
     `Now produce the walkthrough for ${ctx.tag}. Output each beat as a JSON object as soon as it is ready.`,
   ].join('\n');
 }
+
+export type { DocSlug };
