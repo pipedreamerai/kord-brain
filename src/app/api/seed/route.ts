@@ -98,15 +98,15 @@ export async function GET() {
             await delay(60);
             continue;
           }
-          const tags = (Object.entries(tagIndex) as [string, unknown[]][])
-            .filter(([, locs]) => (locs as { slug: string }[]).some(l => l.slug === meta.slug))
+          const tags = (Object.entries(tagIndex) as [string, { slug: string }[]][])
+            .filter(([, locs]) => locs.some(l => l.slug === meta.slug))
             .map(([tag]) => tag);
           emit({ type: 'doc_done', slug: meta.slug, displayName: meta.displayName, kind: meta.kind, tagCount: tags.length, tags: tags.slice(0, 12) });
           await delay(120);
         }
 
         // ── Done ──────────────────────────────────────────────────────────────
-        const totalTagged = (Object.values(tagIndex) as unknown[][]).filter(l => l.length > 0).length;
+        const totalTagged = Object.values(tagIndex).filter(l => l.length > 0).length;
         emit({ type: 'complete', totalTagged, docCount: Object.keys(docs).length });
       } catch (err) {
         emit({ type: 'error', message: err instanceof Error ? err.message : String(err) });
