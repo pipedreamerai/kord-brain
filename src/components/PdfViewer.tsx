@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { PDFDocumentLoadingTask } from 'pdfjs-dist/types/src/display/api';
+import { tagToSlug } from '@/lib/tagRegex';
 
 export type PdfBboxEntry = {
   tag: string;
@@ -163,7 +164,7 @@ export function PdfViewer({ url, bboxes, highlightedTags, onTagClick }: Props) {
                 const top = dim.cssHeight - y1 * dim.scale;
                 const width = (x1 - x0) * dim.scale;
                 const height = (y1 - y0) * dim.scale;
-                const highlighted = highlightedTags.has(b.tag);
+                const highlighted = highlightedTags.has(tagToSlug(b.tag));
                 return (
                   <div
                     key={`${b.tag}-${pageNum}-${bi}`}

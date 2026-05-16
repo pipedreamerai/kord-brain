@@ -1,14 +1,15 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { tagToSlug } from '@/lib/tagRegex';
 
 type Props = {
   html: string;
-  highlightedAnchors: Set<string>;
+  highlightedTags: Set<string>;
   onTagClick: (tag: string, anchorId: string) => void;
 };
 
-export function DocxViewer({ html, highlightedAnchors, onTagClick }: Props) {
+export function DocxViewer({ html, highlightedTags, onTagClick }: Props) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -16,12 +17,13 @@ export function DocxViewer({ html, highlightedAnchors, onTagClick }: Props) {
     if (!el) return;
     let firstHighlighted: HTMLElement | null = null;
     el.querySelectorAll<HTMLElement>('mark[data-tag]').forEach((m) => {
-      const highlighted = highlightedAnchors.has(m.id);
+      const tag = m.dataset.tag;
+      const highlighted = !!tag && highlightedTags.has(tagToSlug(tag));
       m.classList.toggle('kb-tag-active', highlighted);
       if (highlighted && !firstHighlighted) firstHighlighted = m;
     });
     if (firstHighlighted) (firstHighlighted as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, [highlightedAnchors, html]);
+  }, [highlightedTags, html]);
 
   function handleClick(e: React.MouseEvent<HTMLDivElement>) {
     const target = e.target as HTMLElement;

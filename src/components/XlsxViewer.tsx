@@ -1,5 +1,7 @@
 'use client';
 
+import { tagToSlug } from '@/lib/tagRegex';
+
 type Sheet = { name: string; header: string[]; rows: string[][] };
 
 type Props = {
@@ -30,7 +32,7 @@ export function XlsxViewer({ sheets, highlightedTags, onTagClick }: Props) {
               <tbody>
                 {sheet.rows.map((row, i) => {
                   const tag = row[0];
-                  const isTagRow = tag && highlightedTags.has(tag);
+                  const isTagRow = tag && highlightedTags.has(tagToSlug(tag));
                   return (
                     <tr
                       key={i}
