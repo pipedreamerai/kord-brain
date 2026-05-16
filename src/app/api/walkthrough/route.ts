@@ -6,6 +6,11 @@ import { TAGS, isTag, type Tag } from '@/lib/tags';
 import { DOCS, type DocSlug } from '@/lib/docs';
 import { getTagIndex } from '@/lib/tagIndex';
 import { buildPrompt, buildWalkthroughContext } from '@/lib/walkthroughContext';
+import {
+  DEFAULT_WALKTHROUGH_MODEL,
+  isWalkthroughModel,
+  type WalkthroughModel,
+} from '@/lib/aiModels';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -48,6 +53,11 @@ export async function POST(req: NextRequest) {
     );
   }
   const tag: Tag = tagRaw;
+  const modelRaw = (body as { model?: unknown } | null)?.model;
+  const model: WalkthroughModel =
+    typeof modelRaw === 'string' && isWalkthroughModel(modelRaw)
+      ? modelRaw
+      : DEFAULT_WALKTHROUGH_MODEL;
 
   if (!process.env.AI_GATEWAY_API_KEY) {
     return NextResponse.json(
@@ -66,7 +76,7 @@ export async function POST(req: NextRequest) {
   const prompt = buildPrompt(ctx);
 
   const result = streamObject({
-    model: gateway('anthropic/claude-opus-4-7'),
+    model: gateway(model),
     output: 'array',
     schema: Beat,
     prompt,

@@ -5,6 +5,7 @@ import { useDemoStore, type Highlight } from '@/lib/store';
 import { docBySlug, type DocSlug } from '@/lib/docs';
 import { TAGS, isTag, type Tag } from '@/lib/tags';
 import type { TagIndex } from '@/lib/tagIndex';
+import { DEFAULT_WALKTHROUGH_MODEL, WALKTHROUGH_MODELS, type WalkthroughModel } from '@/lib/aiModels';
 import { GbrainGraph } from './GbrainGraph';
 
 type Props = {
@@ -33,6 +34,7 @@ export function WalkthroughPanel({ tagIndex }: Props) {
   const clearHighlights = useDemoStore((s) => s.clearHighlights);
 
   const [tag, setTag] = useState<Tag>('M-101');
+  const [model, setModel] = useState<WalkthroughModel>(DEFAULT_WALKTHROUGH_MODEL);
   const [beats, setBeats] = useState<Beat[]>([]);
   const [activeBeat, setActiveBeat] = useState<number | null>(null);
   const [status, setStatus] = useState<Status>('idle');
@@ -74,7 +76,7 @@ export function WalkthroughPanel({ tagIndex }: Props) {
       const res = await fetch('/api/walkthrough', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tag }),
+        body: JSON.stringify({ tag, model }),
         signal: controller.signal,
       });
 
@@ -159,6 +161,19 @@ export function WalkthroughPanel({ tagIndex }: Props) {
             </option>
           ))}
         </select>
+        <select
+          value={model}
+          onChange={(e) => setModel(e.target.value as WalkthroughModel)}
+          disabled={status === 'streaming'}
+          className="min-w-0 flex-1 text-[11px] border border-zinc-300 rounded px-2 py-1 bg-white"
+          aria-label="Walkthrough model"
+        >
+          {WALKTHROUGH_MODELS.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
+        </select>
         <button
           onClick={startWalkthrough}
           disabled={status === 'streaming'}
@@ -172,7 +187,7 @@ export function WalkthroughPanel({ tagIndex }: Props) {
         Context is selected by <span className="font-semibold text-emerald-700">gbrain</span> (knowledge graph
         over the raw docs), then streamed through{' '}
         <code className="text-[10px] bg-zinc-100 px-1 py-0.5 rounded">
-          anthropic/claude-opus-4-7
+          {model}
         </code>{' '}
         via the AI Gateway. Each beat retargets highlights across the doc set.
       </p>
