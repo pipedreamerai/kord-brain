@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import type { PDFDocumentLoadingTask, RenderTask } from 'pdfjs-dist/types/src/display/api';
 
 export type PdfBboxEntry = {
   tag: string;
@@ -32,6 +33,8 @@ export function PdfViewer({ url, bboxes, highlightedTags, onTagClick }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    let loadingTask: PDFDocumentLoadingTask | null = null;
+    let renderTask: RenderTask | null = null;
     setError(null);
     setDims(null);
 
@@ -45,8 +48,13 @@ export function PdfViewer({ url, bboxes, highlightedTags, onTagClick }: Props) {
         const pdfjs = await import('pdfjs-dist');
         pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
-        const pdf = await pdfjs.getDocument(url).promise;
+        loadingTask = pdfjs.getDocument(url);
+        const pdf = await loadingTask.promise;
+        if (cancelled) return;
+
         const page = await pdf.getPage(1);
+        if (cancelled) return;
+
         const baseViewport = page.getViewport({ scale: 1 });
         const containerWidth = wrapper.parentElement?.clientWidth ?? 800;
         const targetWidth = Math.min(containerWidth - 32, 1100);
@@ -63,7 +71,9 @@ export function PdfViewer({ url, bboxes, highlightedTags, onTagClick }: Props) {
         if (!ctx) throw new Error('No 2D context available');
         ctx.scale(dpr, dpr);
 
-        await page.render({ canvasContext: ctx, viewport: scaled, canvas }).promise;
+        const currentRenderTask = page.render({ canvasContext: ctx, viewport: scaled, canvas });
+        renderTask = currentRenderTask;
+        await currentRenderTask.promise;
         if (cancelled) return;
 
         setDims({
@@ -74,11 +84,16 @@ export function PdfViewer({ url, bboxes, highlightedTags, onTagClick }: Props) {
           scale,
         });
       } catch (err) {
+        if (err instanceof Error && err.name === 'RenderingCancelledException') return;
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       }
     }
     render();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      renderTask?.cancel();
+      void loadingTask?.destroy();
+    };
   }, [url]);
 
   function handleClick(e: React.MouseEvent<HTMLDivElement>) {
