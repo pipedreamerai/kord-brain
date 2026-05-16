@@ -34,7 +34,7 @@ export function TagsSidebar({ tagIndex, onTagClick }: Props) {
               >
                 <div className="font-mono text-[13px] font-semibold text-zinc-900">{tag}</div>
                 <div className="text-[11px] text-zinc-500 leading-tight mt-0.5">
-                  {TAG_DESCRIPTIONS[tag]}
+                  {TAG_DESCRIPTIONS[tag] ?? <span className="text-zinc-300">—</span>}
                 </div>
                 <div className="text-[10px] text-zinc-400 mt-0.5">
                   {locs.length} location{locs.length === 1 ? '' : 's'}

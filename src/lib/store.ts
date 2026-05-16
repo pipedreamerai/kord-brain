@@ -19,7 +19,7 @@ type DemoState = {
 };
 
 export const useDemoStore = create<DemoState>((set) => ({
-  activeDoc: 'pid',
+  activeDoc: 'dd_full_pid',
   setActiveDoc: (activeDoc) => set({ activeDoc }),
   highlights: [],
   setHighlights: (highlights) => set({ highlights }),

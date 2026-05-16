@@ -68,9 +68,9 @@ export async function buildWalkthroughContext(tag: Tag): Promise<WalkthroughCont
 }
 
 export function buildPrompt(ctx: WalkthroughContext): string {
-  const appearsIn = TAG_APPEARS_IN[ctx.tag]
+  const appearsIn = (TAG_APPEARS_IN[ctx.tag] ?? [])
     .map((s) => docBySlug(s).displayName)
-    .join(', ');
+    .join(', ') || '(no doc index yet)';
 
   const docList = DOCS.map(
     (d) => `  - ${d.slug} ("${d.displayName}", ${d.kind})`,
@@ -98,7 +98,7 @@ export function buildPrompt(ctx: WalkthroughContext): string {
     : 'Backlinks: (none)';
 
   return [
-    `You are a senior process/instrumentation engineer walking a colleague through component ${ctx.tag} (${TAG_DESCRIPTIONS[ctx.tag]}) across a multi-document engineering package for the Evoqua M284R two-pass RO unit at Electric Hydrogen, Beaumont TX (project 2034/001845).`,
+    `You are a senior process/instrumentation engineer walking a colleague through component ${ctx.tag} (${TAG_DESCRIPTIONS[ctx.tag] ?? 'no description on file'}) across a multi-document engineering package for the Evoqua 2-pass RO + CDI water purification unit at Electric Hydrogen (project 2034/001845).`,
     ``,
     `The context below was selected by gbrain (a knowledge-graph engine). gbrain ingested the raw engineering docs, extracted entity wiki-links, and returned the subgraph reachable from ${ctx.rootSlug}. The LLM only sees what gbrain says is connected.`,
     ``,
