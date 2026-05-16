@@ -29,7 +29,7 @@ export function GraphTab() {
                 <p className="text-[12px] text-zinc-600 font-mono">empty graph</p>
                 <p className="text-[11px] text-zinc-700 mt-1">
                   {docCount === 0
-                    ? <>upload files in the <span className="text-blue-400">Files</span> tab to populate</>
+                    ? <>upload files on the left to populate</>
                     : <>no edges yet — the gbrain pipeline may still be running</>}
                 </p>
               </div>

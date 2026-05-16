@@ -6,8 +6,6 @@ import { FilesTab } from './FilesTab';
 import { GraphTab } from './GraphTab';
 
 export function AppShell() {
-  const view = useAppStore((s) => s.view);
-  const setView = useAppStore((s) => s.setView);
   const hydrate = useAppStore((s) => s.hydrate);
   const docCount = useAppStore((s) => s.docs.length);
   const graphNodes = useAppStore((s) => s.graph.nodes.length);
@@ -24,66 +22,26 @@ export function AppShell() {
           <h1 className="text-base font-semibold text-white">kord-brain</h1>
           <span className="text-[11px] text-zinc-500">cross-doc engineering reasoning</span>
         </div>
-        <nav className="ml-6 flex items-center gap-1">
-          <TabButton
-            label="Files"
-            badge={docCount > 0 ? docCount : undefined}
-            active={view === 'files'}
-            color="blue"
-            onClick={() => setView('files')}
-          />
-          <TabButton
-            label="Graph"
-            badge={graphNodes > 0 ? `${graphNodes}·${graphEdges}` : undefined}
-            active={view === 'graph'}
-            color="emerald"
-            onClick={() => setView('graph')}
-          />
-        </nav>
+        <div className="ml-auto flex items-center gap-4 text-[11px] font-mono text-zinc-500">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />
+            {docCount} file{docCount === 1 ? '' : 's'}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            {graphNodes} node{graphNodes === 1 ? '' : 's'} · {graphEdges} edge{graphEdges === 1 ? '' : 's'}
+          </span>
+        </div>
       </header>
 
-      <div className="flex-1 min-h-0 relative">
-        <div className={`absolute inset-0 ${view !== 'files' ? 'hidden' : ''}`}>
+      <div className="flex-1 min-h-0 flex">
+        <div className="flex-1 min-w-0 border-r border-zinc-800">
           <FilesTab />
         </div>
-        <div className={`absolute inset-0 ${view !== 'graph' ? 'hidden' : ''}`}>
+        <div className="w-[42%] min-w-[360px]">
           <GraphTab />
         </div>
       </div>
     </div>
-  );
-}
-
-function TabButton({
-  label,
-  badge,
-  active,
-  color,
-  onClick,
-}: {
-  label: string;
-  badge?: string | number;
-  active: boolean;
-  color: 'emerald' | 'blue';
-  onClick: () => void;
-}) {
-  const activeClass =
-    color === 'emerald'
-      ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-700'
-      : 'bg-blue-900/60 text-blue-300 border border-blue-700';
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1 text-[12px] font-medium rounded transition-colors flex items-center gap-1.5 ${
-        active ? activeClass : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 border border-transparent'
-      }`}
-    >
-      {label}
-      {badge !== undefined && (
-        <span className={`text-[10px] font-mono rounded px-1 ${
-          active ? 'bg-black/30' : 'bg-zinc-800 text-zinc-500'
-        }`}>{badge}</span>
-      )}
-    </button>
   );
 }
