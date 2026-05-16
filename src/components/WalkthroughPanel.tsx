@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDemoStore, type Highlight } from '@/lib/store';
 import { docBySlug, type DocSlug } from '@/lib/docs';
-import { TAGS, type Tag } from '@/lib/tags';
+import { TAGS, isTag, type Tag } from '@/lib/tags';
 import type { TagIndex } from '@/lib/tagIndex';
+import { GbrainGraph } from './GbrainGraph';
 
 type Props = {
   tagIndex: TagIndex;
@@ -178,7 +179,7 @@ export function WalkthroughPanel({ tagIndex }: Props) {
 
       {gbrainCtx && (
         <div className="mb-3 border border-emerald-200 bg-emerald-50/60 rounded p-2">
-          <div className="flex items-baseline gap-2 mb-1.5">
+          <div className="flex items-baseline gap-2 mb-1">
             <span className="text-[10px] font-mono uppercase tracking-wide text-emerald-800 font-semibold">
               gbrain
             </span>
@@ -187,29 +188,31 @@ export function WalkthroughPanel({ tagIndex }: Props) {
               {gbrainCtx.neighbors.length} pages, {gbrainCtx.edges.length} 1-hop edges
             </span>
           </div>
-          <div className="flex flex-wrap gap-1">
-            {gbrainCtx.neighbors.map((n) => (
-              <span
-                key={n.slug}
-                title={n.title}
-                className={
-                  'text-[10px] font-mono px-1.5 py-0.5 rounded ' +
-                  (n.kind === 'document'
-                    ? 'bg-indigo-100 text-indigo-800'
-                    : n.kind === 'tag'
-                    ? 'bg-amber-100 text-amber-800'
-                    : 'bg-zinc-100 text-zinc-700')
-                }
-              >
-                {n.kind === 'document' ? '📄 ' : '·'} {n.slug}
-              </span>
-            ))}
+          <GbrainGraph
+            root={gbrainCtx.root}
+            neighbors={gbrainCtx.neighbors}
+            edges={gbrainCtx.edges}
+            onNodeClick={(slug, kind) => {
+              if (status === 'streaming') return;
+              if (kind !== 'tag') return;
+              const upper = slug.toUpperCase() as Tag;
+              if (!isTag(upper)) return;
+              setTag(upper);
+              setTimeout(() => startWalkthrough(), 0);
+            }}
+          />
+          <div className="flex items-center gap-3 text-[9px] text-emerald-900/70 mt-1">
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" /> root
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-indigo-500" /> document
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-amber-500" /> tag
+            </span>
+            <span className="ml-auto italic">click a tag node →</span>
           </div>
-          {gbrainCtx.backlinks.length > 0 && (
-            <div className="mt-1.5 text-[10px] text-emerald-900/70">
-              backlinks: {gbrainCtx.backlinks.join(', ')}
-            </div>
-          )}
         </div>
       )}
 
