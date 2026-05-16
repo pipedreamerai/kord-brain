@@ -1,27 +1,29 @@
 ---
-title: P&ID — Hydrogen Feedwater Skid
+title: Bid P&ID — Evoqua M284R RO Unit
 type: document
-source_file: pid.pdf
-discipline: process
+doc_kind: pdf
 ---
 
-# P&ID — Hydrogen Feedwater Skid
+# [[pid]] — Bid P&ID
 
-Single-page Piping & Instrumentation Diagram for the feedwater skid. ISA-5.1 conventions, drawing scale 1:1 page.
+Single-page process and instrument diagram submitted with the Evoqua bid for project 2034/001845 (Electric Hydrogen, Beaumont TX). Shows the two-pass RO skid process flow at bid stage.
 
-## Components shown
+## What it shows
 
-- [[t-101]] — suction tank (500 gal, SS316), positioned upstream of the pump
-- [[lsl-201]] — low-low level switch mounted on [[t-101]], wired to the motor start interlock
-- [[p-101]] — feedwater pump, draws from [[t-101]] and discharges through [[cv-301]]
-- [[cv-301]] — discharge control valve, regulates flow into the electrolyzer stack inlet header
+Feed water inlet through cartridge filter, 1st-pass pump and membrane array, interstage treatment, 2nd-pass pump and membrane array, product water outlet, and reject/drain paths. Instrument bubbles reference the same tag numbers as the detailed design.
 
-## Flow path
+## Key instruments shown
 
-[[t-101]] → [[p-101]] → [[cv-301]] → electrolyzer stack inlet.
+- Flow transmitters [[ft-301]], [[ft-303]] (feed and product)
+- High-pressure transmitters [[pit-305]], [[pit-312]]
+- Level switches [[lsl-201]] on pump suction
+- Buffer tank instruments [[lit-501]]
 
-Suction line runs from the bottom of [[t-101]] to the pump inlet flange of [[p-101]]. Discharge line from [[p-101]] passes through [[cv-301]] before joining the stack inlet header.
+## Relationship to detailed design
 
-## Instrumentation
+The bid P&ID is a simplified precursor to [[instrument_list]] and the full P&ID. Tag numbers are consistent between bid and detailed design documents.
 
-[[lsl-201]] is the only instrument shown on this drawing. The interlock signal from [[lsl-201]] is wired off-drawing to the motor circuit shown on the electrical single-line.
+## Appears alongside
+
+- [[ro_spec]] — RO unit description submitted with this bid
+- [[instrument_list]] — detailed instrument schedule for the same tag set

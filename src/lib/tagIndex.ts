@@ -49,7 +49,7 @@ export type DocPayloadXlsx = {
 export type DocPayloadEntry = DocPayloadPdf | DocPayloadDocx | DocPayloadXlsx;
 export type DocPayload = Partial<Record<DocSlug, DocPayloadEntry>>;
 
-const samplesDir = path.resolve(process.cwd(), 'samples');
+const docsDir = path.resolve(process.cwd(), 'demo_docs');
 
 let cached: { tagIndex: TagIndex; docs: DocPayload } | null = null;
 
@@ -62,7 +62,7 @@ export async function getTagIndex(): Promise<{ tagIndex: TagIndex; docs: DocPayl
 
   for (const meta of DOCS) {
     if (meta.kind === 'pdf') {
-      const info = await loadPdf(samplesDir, meta.filename);
+      const info = await loadPdf(docsDir, meta.filePath);
       const pageMap: Record<number, { width: number; height: number }> = {};
       for (const p of info.pages) pageMap[p.number] = { width: p.width, height: p.height };
       for (const b of info.bboxes) {
@@ -81,7 +81,7 @@ export async function getTagIndex(): Promise<{ tagIndex: TagIndex; docs: DocPayl
       }
       docs[meta.slug] = { kind: 'pdf', pages: info.pages };
     } else if (meta.kind === 'docx') {
-      const info = await loadDocx(samplesDir, meta.filename);
+      const info = await loadDocx(docsDir, meta.filePath);
       for (const o of info.occurrences) {
         tagIndex[o.tag].push({
           kind: 'docx',
@@ -93,7 +93,7 @@ export async function getTagIndex(): Promise<{ tagIndex: TagIndex; docs: DocPayl
       }
       docs[meta.slug] = { kind: 'docx', html: info.html, text: info.text };
     } else if (meta.kind === 'xlsx') {
-      const info = await loadXlsx(samplesDir, meta.filename);
+      const info = await loadXlsx(docsDir, meta.filePath);
       for (const r of info.tagRows) {
         tagIndex[r.tag].push({
           kind: 'xlsx',

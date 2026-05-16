@@ -79,9 +79,13 @@ export type Page = {
   markdown: string;
 };
 
-export async function getPage(slug: string): Promise<Page> {
-  const raw = await runGbrain(['get', slug]);
-  return parseMarkdown(slug, raw);
+export async function getPage(slug: string): Promise<Page | null> {
+  try {
+    const raw = await runGbrain(['get', slug]);
+    return parseMarkdown(slug, raw);
+  } catch {
+    return null;
+  }
 }
 
 function parseMarkdown(slug: string, raw: string): Page {
@@ -107,9 +111,11 @@ export async function getRelatedContext(slug: string, depth = 1): Promise<{
     if (node.depth === 0) continue;
     slugs.add(node.slug);
   }
-  const [root, ...neighbors] = await Promise.all([
+  const slugArr = Array.from(slugs);
+  const [root, ...neighborPages] = await Promise.all([
     getPage(slug),
-    ...Array.from(slugs).map(s => getPage(s)),
+    ...slugArr.map(s => getPage(s)),
   ]);
-  return { root, neighbors, graph: graphData };
+  const neighbors = neighborPages.filter((p): p is Page => p !== null);
+  return { root: root ?? { slug, frontmatter: {}, markdown: '' }, neighbors, graph: graphData };
 }

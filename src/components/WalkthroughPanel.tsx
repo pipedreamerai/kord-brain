@@ -32,7 +32,7 @@ export function WalkthroughPanel({ tagIndex }: Props) {
   const applyBeatHighlights = useDemoStore((s) => s.applyBeatHighlights);
   const clearHighlights = useDemoStore((s) => s.clearHighlights);
 
-  const [tag, setTag] = useState<Tag>('M-101');
+  const [tag, setTag] = useState<Tag>('LSL-201');
   const [beats, setBeats] = useState<Beat[]>([]);
   const [activeBeat, setActiveBeat] = useState<number | null>(null);
   const [status, setStatus] = useState<Status>('idle');
