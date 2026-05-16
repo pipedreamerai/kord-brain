@@ -45,20 +45,26 @@ export async function buildWalkthroughContext(tag: Tag): Promise<WalkthroughCont
     if (b.from_slug !== rootSlug) neighborSlugs.add(b.from_slug);
   }
 
+  const slugArr = Array.from(neighborSlugs);
   const [rootPage, ...neighborPages] = await Promise.all([
     getPage(rootSlug),
-    ...Array.from(neighborSlugs).map((s) => getPage(s)),
+    ...slugArr.map((s) => getPage(s)),
   ]);
 
-  const neighbors: GbrainNeighbor[] = Array.from(neighborSlugs).map((slug, i) => ({
-    slug,
-    kind: classify(slug),
-    page: neighborPages[i],
-  }));
+  const neighbors: GbrainNeighbor[] = slugArr
+    .map((slug, i) => ({ slug, kind: classify(slug), page: neighborPages[i] }))
+    .filter((nb): nb is GbrainNeighbor => nb.page !== null);
 
   const incoming = incomingRaw.map((b) => ({ from_slug: b.from_slug, context: b.context }));
 
-  return { tag, rootSlug, rootPage, neighbors, graph: graphData, incoming };
+  return {
+    tag,
+    rootSlug,
+    rootPage: rootPage ?? { slug: rootSlug, frontmatter: {}, markdown: '' },
+    neighbors,
+    graph: graphData,
+    incoming,
+  };
 }
 
 export function buildPrompt(ctx: WalkthroughContext): string {
@@ -92,7 +98,7 @@ export function buildPrompt(ctx: WalkthroughContext): string {
     : 'Backlinks: (none)';
 
   return [
-    `You are a senior process/electrical engineer walking a colleague through component ${ctx.tag} (${TAG_DESCRIPTIONS[ctx.tag]}) across a multi-document engineering package for a hydrogen feedwater skid.`,
+    `You are a senior process/instrumentation engineer walking a colleague through component ${ctx.tag} (${TAG_DESCRIPTIONS[ctx.tag]}) across a multi-document engineering package for the Evoqua M284R two-pass RO unit at Electric Hydrogen, Beaumont TX (project 2034/001845).`,
     ``,
     `The context below was selected by gbrain (a knowledge-graph engine). gbrain ingested the raw engineering docs, extracted entity wiki-links, and returned the subgraph reachable from ${ctx.rootSlug}. The LLM only sees what gbrain says is connected.`,
     ``,

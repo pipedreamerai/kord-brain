@@ -1,12 +1,12 @@
 export const TAGS = [
-  'P-101',
-  'M-101',
-  'CB-101',
-  'MCC-1',
+  'FT-301',
+  'FT-302',
+  'FT-303',
+  'PIT-305',
+  'PIT-312',
   'LSL-201',
-  'CV-301',
-  'T-101',
-  'IR-2',
+  'LIT-501',
+  'HV-507',
 ] as const;
 
 export type Tag = (typeof TAGS)[number];

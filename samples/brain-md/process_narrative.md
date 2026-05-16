@@ -1,30 +1,29 @@
 ---
-title: Process Narrative — Hydrogen Feedwater Skid
+title: System Narrative — Evoqua M284R RO Unit
 type: document
-source_file: process_narrative.docx
-discipline: process
+doc_kind: docx
 ---
 
-# Process Narrative — Hydrogen Feedwater Skid
+# [[process_narrative]] — System Narrative
 
-## 1. Overview
+Operational description of the Evoqua Vantage M284R two-pass RO unit for Electric Hydrogen Beaumont. Covers feed water quality, flow measurement, pressure monitoring, level protection, RODI buffer tank, and control system.
 
-The feedwater skid supplies deionized water to the electrolyzer stack inlet under positive head pressure. The skid comprises a suction tank, a feedwater pump, a discharge control valve, and a low-low level interlock.
+## Topics covered
 
-## 2. Suction Tank
+1. **Project overview** — 100 GPM RODI for electrolyzer feedwater
+2. **Feed water** — deep well, 1276 µS/cm, pH 6.31, 57.4 NTU turbidity
+3. **Flow measurement** — [[ft-301]] (1st pass feed), [[ft-303]] (2nd pass product)
+4. **Pressure monitoring** — [[pit-305]] (1st pass discharge), [[pit-312]] (2nd pass discharge)
+5. **Level protection** — [[lsl-201]] dry-run protection on pump suction
+6. **RODI buffer tank** — [[lit-501]] level control, [[hv-507]] outlet isolation
+7. **Control system** — Siemens S7-1215C PLC + TP700 HMI, Ethernet connectivity
 
-Tank [[t-101]] is a 500-gallon stainless-steel vessel. Level switch [[lsl-201]] trips the motor on low-low condition to protect [[p-101]] from dry running.
+## Key interlock narrative
 
-## 3. Feedwater Supply
+[[lsl-201]] is the primary dry-run protection for the RO feed pump. When suction tank level falls below the switch setpoint, the PLC immediately shuts the pump to prevent cavitation damage. The standby flush cycle uses RO permeate to keep membranes in optimal condition.
 
-### 3.1 Operation
+## Cross-references
 
-Pump [[p-101]] draws from [[t-101]] and discharges through control valve [[cv-301]] into the stack inlet header.
-
-### 3.2 Feedwater Supply Conditions
-
-[[p-101]] supplies DI water at 5 bar to the electrolyzer stack inlet. Suction is taken from [[t-101]]; discharge is regulated by [[cv-301]] in AUTO. [[lsl-201]] must be satisfied for the motor to start.
-
-## 4. Interlocks
-
-The motor will not start unless [[lsl-201]] is satisfied and [[cv-301]] is in AUTO. Both interlocks are wired through the PLC input rack [[ir-2]].
+- [[instrument_list]] — instrument datasheet for all tags mentioned
+- [[ro_spec]] — equipment specification referenced in §7 control system
+- [[pid]] — P&ID showing flow path described in §3–5
