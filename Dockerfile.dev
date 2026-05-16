@@ -1,0 +1,36 @@
+FROM node:24-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl git ca-certificates unzip \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g pnpm@11
+
+# Bun — required by the gbrain CLI shebang
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:$PATH"
+
+WORKDIR /app
+
+# Install JS deps without running postinstall (setup.sh would fight Docker)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY scripts/ ./scripts/
+RUN pnpm install --ignore-scripts && node scripts/copy-pdf-worker.mjs
+
+# gbrain sidecar — clone, link, init brain, seed
+RUN git clone https://github.com/garrytan/gbrain.git /root/.cache/kord-brain/gbrain \
+  && cd /root/.cache/kord-brain/gbrain \
+  && bun install \
+  && bun link
+
+COPY samples/gbrain-seed/ ./samples/gbrain-seed/
+RUN gbrain init \
+  && gbrain import samples/gbrain-seed --no-embed \
+  && gbrain extract links --source fs --dir samples/gbrain-seed
+
+# Copy remaining source (runtime volume mount overlays this for hot reload)
+COPY . .
+
+EXPOSE 3000
+ENV HOSTNAME=0.0.0.0
+CMD ["pnpm", "dev", "--hostname", "0.0.0.0"]
