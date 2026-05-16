@@ -13,6 +13,12 @@
 
 set -euo pipefail
 
+# gbrain is a local dev sidecar — skip entirely in CI/Vercel builds.
+if [ "${CI:-}" = "1" ] || [ "${VERCEL:-}" = "1" ]; then
+  printf '\033[1;36m[setup]\033[0m CI environment detected — skipping gbrain setup.\n'
+  exit 0
+fi
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SEED_DIR="$REPO_ROOT/samples/gbrain-seed"
 GBRAIN_REPO="${GBRAIN_REPO:-https://github.com/garrytan/gbrain.git}"
