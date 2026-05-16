@@ -36,6 +36,29 @@ type GLink = { source: string; target: string; kind: string };
 
 const BRAIN_ID = '__brain__';
 
+const SHELL_R = {
+  document: 60,
+  tag: 110,
+  other: 150,
+} as const;
+
+function fibonacciSphere(n: number, radius: number, seed = 0): { x: number; y: number; z: number }[] {
+  if (n === 0) return [];
+  const golden = Math.PI * (1 + Math.sqrt(5));
+  const out: { x: number; y: number; z: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n;
+    const phi = Math.acos(1 - 2 * t);
+    const theta = golden * (i + 0.5) + seed;
+    out.push({
+      x: radius * Math.sin(phi) * Math.cos(theta),
+      y: radius * Math.sin(phi) * Math.sin(theta),
+      z: radius * Math.cos(phi),
+    });
+  }
+  return out;
+}
+
 const COLORS = {
   document: '#818cf8',
   tag: '#fbbf24',
@@ -74,13 +97,31 @@ export function FullGbrainGraph({ nodes, edges }: Props) {
   }, []);
 
   const data = useMemo(() => {
-    const gnodes: GNode[] = nodes.map((n) => ({
+    const docs = nodes.filter((n) => n.kind === 'document');
+    const tags = nodes.filter((n) => n.kind === 'tag');
+    const others = nodes.filter((n) => n.kind !== 'document' && n.kind !== 'tag');
+
+    const docPos = fibonacciSphere(docs.length, SHELL_R.document, 0);
+    const tagPos = fibonacciSphere(tags.length, SHELL_R.tag, 0.7);
+    const otherPos = fibonacciSphere(others.length, SHELL_R.other, 1.4);
+
+    const make = (n: BrainNode, p: { x: number; y: number; z: number }): GNode => ({
       ...n,
       id: n.slug,
       label: n.title || n.slug,
       color: colorFor(n.kind),
       size: sizeFor(n.kind),
-    }));
+      fx: p.x,
+      fy: p.y,
+      fz: p.z,
+    });
+
+    const gnodes: GNode[] = [
+      ...docs.map((n, i) => make(n, docPos[i])),
+      ...tags.map((n, i) => make(n, tagPos[i])),
+      ...others.map((n, i) => make(n, otherPos[i])),
+    ];
+
     const ids = new Set(gnodes.map((n) => n.id));
     const glinks: GLink[] = edges
       .filter((e) => ids.has(e.from) && ids.has(e.to))
@@ -99,10 +140,8 @@ export function FullGbrainGraph({ nodes, edges }: Props) {
         fy: 0,
         fz: 0,
       });
-      for (const n of nodes) {
-        if (n.kind === 'document') {
-          glinks.push({ source: BRAIN_ID, target: n.slug, kind: 'root' });
-        }
+      for (const n of docs) {
+        glinks.push({ source: BRAIN_ID, target: n.slug, kind: 'root' });
       }
     }
 
