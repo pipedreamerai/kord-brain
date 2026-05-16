@@ -10,6 +10,7 @@ export function AppShell() {
   const docCount = useAppStore((s) => s.docs.length);
   const graphNodes = useAppStore((s) => s.graph.nodes.length);
   const graphEdges = useAppStore((s) => s.graph.edges.length);
+  const graphStats = useAppStore((s) => s.graph.stats);
 
   useEffect(() => {
     void hydrate();
@@ -31,6 +32,11 @@ export function AppShell() {
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
             {graphNodes} node{graphNodes === 1 ? '' : 's'} · {graphEdges} edge{graphEdges === 1 ? '' : 's'}
           </span>
+          {graphStats && (
+            <span>
+              {graphStats.pages} pages · {graphStats.links} links
+            </span>
+          )}
         </div>
       </header>
 

@@ -66,7 +66,7 @@ export function FullGbrainGraph({ nodes, edges }: Props) {
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
-      className="w-full h-auto select-none"
+      className="w-full h-full select-none"
       aria-label="gbrain knowledge graph"
     >
       <defs>
