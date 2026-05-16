@@ -27,11 +27,15 @@ if [ -x "$HOME/.bun/bin/bun" ]; then
   export PATH="$HOME/.bun/bin:$PATH"
 fi
 if ! command -v bun >/dev/null 2>&1; then
-  die "Bun is not installed. Install it and re-run: pnpm setup
-
-    curl -fsSL https://bun.sh/install | bash
-
-Then open a new shell so ~/.bun/bin is on PATH."
+  log "Bun not found. Installing from https://bun.sh/install..."
+  if ! command -v curl >/dev/null 2>&1; then
+    die "curl is required to install Bun. Install curl and re-run."
+  fi
+  curl -fsSL https://bun.sh/install | bash
+  export PATH="$HOME/.bun/bin:$PATH"
+  if ! command -v bun >/dev/null 2>&1; then
+    die "Bun install completed but 'bun' is still not on PATH. Open a new shell and re-run: pnpm setup"
+  fi
 fi
 BUN_VERSION="$(bun --version)"
 log "Bun $BUN_VERSION detected."
