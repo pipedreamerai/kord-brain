@@ -4,7 +4,7 @@ type: document
 doc_kind: pdf
 ---
 
-# [[ro_spec]] — RO Unit Description
+# [[bid_firm_quote]] — RO Unit Description
 
 Evoqua Water Technologies product specification sheet for the Vantage® M284R-044 two-pass reverse osmosis unit. Document 68/S8921-020, Rev. 7, Jan 23, 2017.
 
@@ -37,6 +37,6 @@ Evoqua Water Technologies product specification sheet for the Vantage® M284R-04
 
 ## Cross-references
 
-- [[instrument_list]] — full instrument schedule
-- [[pid]] — process drawing showing instrument placement
+- [[dd_instrument_list]] — full instrument schedule
+- [[bid_pid]] — process drawing showing instrument placement
 - [[process_narrative]] — operational description

@@ -4,7 +4,7 @@ type: document
 doc_kind: pdf
 ---
 
-# [[instrument_list]] — Instrument List
+# [[dd_instrument_list]] — Instrument List
 
 Formal instrument schedule for the Evoqua Vantage M284R RO unit at Electric Hydrogen, Beaumont TX. Revision 0, 21-Mar-24. Engineer: Nikola Vlacic / Kalunga Kisitu.
 
@@ -28,5 +28,5 @@ One data table listing all instruments with SAP number, description, manufacture
 ## Cross-references
 
 - [[equipment_list]] — purchase order and delivery data for the same tags
-- [[pid]] — corresponding P&ID showing instrument locations
+- [[bid_pid]] — corresponding P&ID showing instrument locations
 - [[process_narrative]] — operational description referencing key tags

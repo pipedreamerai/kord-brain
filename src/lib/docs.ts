@@ -7,7 +7,9 @@ export type DocSlug =
   | 'dd_full_pid'
   | 'dd_full_ga'
   | 'dd_instrument_list'
-  | 'rfq';
+  | 'rfq'
+  | 'equipment_list'
+  | 'process_narrative';
 
 export type DocKind = 'pdf' | 'docx' | 'xlsx';
 
@@ -87,6 +89,23 @@ export const DOCS: readonly DocMeta[] = [
     displayName: 'Original RFQ',
     kind: 'pdf',
     package: 'pre_bid',
+  },
+  // Supporting documents (root of demo_docs/)
+  {
+    slug: 'equipment_list',
+    filename: 'equipment_list.xlsx',
+    filePath: 'equipment_list.xlsx',
+    displayName: 'Equipment List',
+    kind: 'xlsx',
+    package: 'detailed_design',
+  },
+  {
+    slug: 'process_narrative',
+    filename: 'process_narrative.docx',
+    filePath: 'process_narrative.docx',
+    displayName: 'Process Narrative',
+    kind: 'docx',
+    package: 'bid',
   },
 ] as const;
 
