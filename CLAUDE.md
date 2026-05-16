@@ -16,9 +16,12 @@
 ```bash
 pnpm install
 cp .env.example .env.local       # then fill in AI_GATEWAY_API_KEY
+pnpm setup                       # bun + gbrain CLI + PGLite brain + seed import
 pnpm placeholders                # generate placeholder sample documents
 pnpm dev                         # http://localhost:3000
 ```
+
+`pnpm setup` is idempotent. It requires Bun (`curl -fsSL https://bun.sh/install | bash`); everything else (gbrain clone, `bun link`, `gbrain init`, importing `samples/gbrain-seed/`) is automatic. `pnpm dev` runs a preflight that fails fast with a pointer to `pnpm setup` if gbrain isn't reachable.
 
 ### Layout
 
