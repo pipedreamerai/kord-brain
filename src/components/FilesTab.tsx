@@ -1,10 +1,12 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAppStore, type UploadedDoc } from '@/lib/appStore';
 import { PdfViewer } from './PdfViewer';
 import { DocxViewer } from './DocxViewer';
 import { XlsxViewer } from './XlsxViewer';
+
+const FILES_BAR_KEY = 'kord:filesBarCollapsed';
 
 export function FilesTab() {
   const docs = useAppStore((s) => s.docs);
@@ -14,7 +16,22 @@ export function FilesTab() {
   const deleteDoc = useAppStore((s) => s.deleteDoc);
   const citedTags = useAppStore((s) => s.citedTags);
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<boolean>(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(FILES_BAR_KEY) === '1') setCollapsed(true);
+    } catch {}
+  }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try { window.localStorage.setItem(FILES_BAR_KEY, next ? '1' : '0'); } catch {}
+      return next;
+    });
+  }
 
   const active = docs.find((d) => d.slug === activeSlug) ?? null;
   const empty = docs.length === 0;
@@ -45,39 +62,60 @@ export function FilesTab() {
         <EmptyState onUpload={openPicker} uploading={uploading} error={uploadError} />
       ) : (
         <>
-          <aside className="w-72 shrink-0 border-r border-zinc-800 flex flex-col">
-            <div className="shrink-0 px-3 py-2 border-b border-zinc-800 flex items-center gap-2">
-              <span className="text-[11px] uppercase tracking-wide text-zinc-500 font-mono">
-                {docs.length} file{docs.length === 1 ? '' : 's'}
-              </span>
+          <aside
+            className={`${collapsed ? 'w-9' : 'w-72'} shrink-0 border-r border-zinc-800 flex flex-col overflow-hidden transition-[width] duration-200`}
+          >
+            <div
+              className={`shrink-0 border-b border-zinc-800 flex items-center gap-2 min-w-0 ${collapsed ? 'justify-center px-1 py-2' : 'px-3 py-2'}`}
+            >
+              {!collapsed && (
+                <>
+                  <span className="text-[11px] uppercase tracking-wide text-zinc-500 font-mono whitespace-nowrap">
+                    {docs.length} file{docs.length === 1 ? '' : 's'}
+                  </span>
+                  <button
+                    onClick={openPicker}
+                    disabled={uploading}
+                    className="ml-auto bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-[11px] font-semibold px-2.5 py-1 rounded transition-colors whitespace-nowrap"
+                  >
+                    {uploading ? 'uploading…' : '+ Upload'}
+                  </button>
+                </>
+              )}
               <button
-                onClick={openPicker}
-                disabled={uploading}
-                className="ml-auto bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-[11px] font-semibold px-2.5 py-1 rounded transition-colors"
+                onClick={toggleCollapsed}
+                aria-label={collapsed ? 'Expand file list' : 'Collapse file list'}
+                aria-expanded={!collapsed}
+                title={collapsed ? 'Show files' : 'Hide files'}
+                className="text-zinc-500 hover:text-zinc-200 p-0.5 shrink-0"
               >
-                {uploading ? 'uploading…' : '+ Upload'}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  {collapsed ? <polyline points="9 18 15 12 9 6" /> : <polyline points="15 18 9 12 15 6" />}
+                </svg>
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-              {docs.map((d) => (
-                <FileRow
-                  key={d.slug}
-                  doc={d}
-                  active={d.slug === activeSlug}
-                  citedTags={citedTags}
-                  onClick={() => setActiveSlug(d.slug)}
-                  onDelete={() => {
-                    if (activeSlug === d.slug) setActiveSlug(null);
-                    void deleteDoc(d.slug);
-                  }}
-                />
-              ))}
-              {uploadError && (
-                <div className="text-[10px] text-red-400 bg-red-950/40 border border-red-900/60 rounded p-2 mt-2 font-mono">
-                  {uploadError}
-                </div>
-              )}
-            </div>
+            {!collapsed && (
+              <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                {docs.map((d) => (
+                  <FileRow
+                    key={d.slug}
+                    doc={d}
+                    active={d.slug === activeSlug}
+                    citedTags={citedTags}
+                    onClick={() => setActiveSlug(d.slug)}
+                    onDelete={() => {
+                      if (activeSlug === d.slug) setActiveSlug(null);
+                      void deleteDoc(d.slug);
+                    }}
+                  />
+                ))}
+                {uploadError && (
+                  <div className="text-[10px] text-red-400 bg-red-950/40 border border-red-900/60 rounded p-2 mt-2 font-mono">
+                    {uploadError}
+                  </div>
+                )}
+              </div>
+            )}
           </aside>
 
           <main className="flex-1 min-w-0 bg-zinc-100 text-zinc-900 overflow-auto">
