@@ -3,17 +3,33 @@
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import type { UIMessage } from 'ai';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '@/lib/appStore';
 
 type AnyPart = UIMessage['parts'][number];
 
 const SLUG_RE = /^[a-z0-9][a-z0-9_/-]*$/;
+const CHAT_BAR_KEY = 'kord:chatBarCollapsed';
 
 export function ChatPanel() {
   const setCitedTags = useAppStore((s) => s.setCitedTags);
   const [input, setInput] = useState('');
+  const [collapsed, setCollapsed] = useState<boolean>(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(CHAT_BAR_KEY) === '1') setCollapsed(true);
+    } catch {}
+  }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try { window.localStorage.setItem(CHAT_BAR_KEY, next ? '1' : '0'); } catch {}
+      return next;
+    });
+  }
 
   const transport = useMemo(
     () => new DefaultChatTransport({ api: '/api/chat' }),
@@ -48,62 +64,85 @@ export function ChatPanel() {
   }
 
   return (
-    <aside className="w-96 shrink-0 border-l border-zinc-800 flex flex-col bg-zinc-950 text-zinc-100">
-      <div className="shrink-0 px-3 py-2 border-b border-zinc-800 flex items-center gap-2">
-        <span className="text-[11px] uppercase tracking-wide text-zinc-500 font-mono">
-          Ask the brain
-        </span>
-        {messages.length > 0 && (
-          <button
-            onClick={clearChat}
-            className="ml-auto text-[10px] text-zinc-500 hover:text-zinc-300 font-mono"
-          >
-            clear
-          </button>
+    <aside
+      className={`${collapsed ? 'w-9' : 'w-96'} shrink-0 border-l border-zinc-800 flex flex-col overflow-hidden transition-[width] duration-200 bg-zinc-950 text-zinc-100`}
+    >
+      <div
+        className={`shrink-0 border-b border-zinc-800 flex items-center gap-2 min-w-0 ${collapsed ? 'justify-center px-1 py-2' : 'px-3 py-2'}`}
+      >
+        <button
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? 'Expand chat panel' : 'Collapse chat panel'}
+          aria-expanded={!collapsed}
+          title={collapsed ? 'Show chat' : 'Hide chat'}
+          className="text-zinc-500 hover:text-zinc-200 p-0.5 shrink-0"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            {collapsed ? <polyline points="15 18 9 12 15 6" /> : <polyline points="9 18 15 12 9 6" />}
+          </svg>
+        </button>
+        {!collapsed && (
+          <>
+            <span className="text-[11px] uppercase tracking-wide text-zinc-500 font-mono whitespace-nowrap">
+              Ask the brain
+            </span>
+            {messages.length > 0 && (
+              <button
+                onClick={clearChat}
+                className="ml-auto text-[10px] text-zinc-500 hover:text-zinc-300 font-mono"
+              >
+                clear
+              </button>
+            )}
+          </>
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 min-h-0">
-        {messages.length === 0 && (
-          <EmptyHint />
-        )}
-        {messages.map((m) => (
-          <MessageView key={m.id} message={m} />
-        ))}
-        {error && (
-          <div className="text-[11px] text-red-300 bg-red-950/40 border border-red-900/60 rounded p-2 font-mono">
-            {error.message}
+      {!collapsed && (
+        <>
+          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 min-h-0">
+            {messages.length === 0 && (
+              <EmptyHint />
+            )}
+            {messages.map((m) => (
+              <MessageView key={m.id} message={m} />
+            ))}
+            {error && (
+              <div className="text-[11px] text-red-300 bg-red-950/40 border border-red-900/60 rounded p-2 font-mono">
+                {error.message}
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      <div className="shrink-0 border-t border-zinc-800 p-2">
-        <textarea
-          ref={taRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-          placeholder={busy ? 'thinking…' : 'Ask anything about the brain…'}
-          disabled={busy}
-          rows={2}
-          className="w-full resize-none bg-zinc-900 border border-zinc-800 rounded px-2.5 py-2 text-[12px] text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-700 disabled:opacity-50"
-        />
-        <div className="mt-1 flex items-center gap-2">
-          <span className="text-[10px] text-zinc-600 font-mono">⏎ send · ⇧⏎ newline</span>
-          <button
-            onClick={submit}
-            disabled={busy || input.trim().length === 0}
-            className="ml-auto bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-[11px] font-semibold px-2.5 py-1 rounded"
-          >
-            {busy ? '…' : 'Send'}
-          </button>
-        </div>
-      </div>
+          <div className="shrink-0 border-t border-zinc-800 p-2">
+            <textarea
+              ref={taRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
+              placeholder={busy ? 'thinking…' : 'Ask anything about the brain…'}
+              disabled={busy}
+              rows={2}
+              className="w-full resize-none bg-zinc-900 border border-zinc-800 rounded px-2.5 py-2 text-[12px] text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-700 disabled:opacity-50"
+            />
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-[10px] text-zinc-600 font-mono">⏎ send · ⇧⏎ newline</span>
+              <button
+                onClick={submit}
+                disabled={busy || input.trim().length === 0}
+                className="ml-auto bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-[11px] font-semibold px-2.5 py-1 rounded"
+              >
+                {busy ? '…' : 'Send'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </aside>
   );
 }
