@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readUploadedFile } from '@/lib/uploads';
+import { deleteUpload, findSlugByFilename, readUploadedFile } from '@/lib/uploads';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,4 +27,15 @@ export async function GET(
   } catch {
     return new NextResponse('Not found', { status: 404 });
   }
+}
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ filename: string }> },
+) {
+  const { filename } = await params;
+  const slug = await findSlugByFilename(filename);
+  if (!slug) return new NextResponse('Not found', { status: 404 });
+  await deleteUpload(slug);
+  return NextResponse.json({ slug });
 }

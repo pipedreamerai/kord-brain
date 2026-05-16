@@ -1,14 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useAppStore } from '@/lib/appStore';
 import { FilesTab } from './FilesTab';
 import { GraphTab } from './GraphTab';
 
-type RootView = 'files' | 'graph';
-
 export function AppShell() {
-  const [view, setView] = useState<RootView>('files');
+  const view = useAppStore((s) => s.view);
+  const setView = useAppStore((s) => s.setView);
   const hydrate = useAppStore((s) => s.hydrate);
   const docCount = useAppStore((s) => s.docs.length);
   const graphNodes = useAppStore((s) => s.graph.nodes.length);

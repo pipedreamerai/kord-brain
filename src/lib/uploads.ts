@@ -241,6 +241,44 @@ export async function readUploadedFile(filename: string): Promise<Buffer> {
   return readFile(path.join(UPLOADS_DIR, filename));
 }
 
+export async function deleteUpload(slug: string): Promise<void> {
+  const c = await loadCache();
+  const doc = c.get(slug);
+  if (!doc) return;
+
+  await rm(path.join(UPLOADS_DIR, doc.filename), { force: true });
+
+  c.delete(slug);
+  const meta = await loadMeta();
+  meta.docs = [...c.values()].map(({ payload: _payload, ...rest }) => rest);
+  await saveMeta(meta);
+
+  await gbrain.deletePage(slug);
+
+  // For each tag the deleted doc carried, recompute the tag page from the
+  // remaining docs. If no doc still mentions it, drop the tag page entirely.
+  const remaining = [...c.values()];
+  for (const tag of doc.tags) {
+    const tagSlug = tagToSlug(tag);
+    const stillMentionedBy = remaining
+      .filter((d) => d.tags.includes(tag))
+      .map((d) => d.slug);
+    if (stillMentionedBy.length === 0) {
+      await gbrain.deletePage(tagSlug);
+    } else {
+      await gbrain.putPage(tagSlug, buildTagMarkdown(tag, stillMentionedBy));
+    }
+  }
+}
+
+export async function findSlugByFilename(filename: string): Promise<string | null> {
+  const c = await loadCache();
+  for (const d of c.values()) {
+    if (d.filename === filename) return d.slug;
+  }
+  return null;
+}
+
 export async function nukeAll(): Promise<{ pagesDeleted: number; filesDeleted: number }> {
   const meta = await loadMeta();
   const slugs = new Set<string>();

@@ -11,6 +11,7 @@ export function FilesTab() {
   const uploading = useAppStore((s) => s.uploading);
   const uploadError = useAppStore((s) => s.uploadError);
   const uploadFiles = useAppStore((s) => s.uploadFiles);
+  const deleteDoc = useAppStore((s) => s.deleteDoc);
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -63,6 +64,10 @@ export function FilesTab() {
                   doc={d}
                   active={d.slug === activeSlug}
                   onClick={() => setActiveSlug(d.slug)}
+                  onDelete={() => {
+                    if (activeSlug === d.slug) setActiveSlug(null);
+                    void deleteDoc(d.slug);
+                  }}
                 />
               ))}
               {uploadError && (
@@ -92,15 +97,25 @@ function FileRow({
   doc,
   active,
   onClick,
+  onDelete,
 }: {
   doc: UploadedDoc;
   active: boolean;
   onClick: () => void;
+  onDelete: () => void;
 }) {
   return (
-    <button
+    <div
       onClick={onClick}
-      className={`w-full text-left rounded px-2.5 py-2 transition-colors border ${
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className={`group w-full text-left rounded px-2.5 py-2 transition-colors border cursor-pointer ${
         active
           ? 'bg-blue-950/60 border-blue-800'
           : 'border-transparent hover:bg-zinc-900/60'
@@ -108,7 +123,22 @@ function FileRow({
     >
       <div className="flex items-center gap-2">
         <KindBadge kind={doc.kind} />
-        <span className="text-[12px] text-zinc-200 truncate">{doc.displayName}</span>
+        <span className="text-[12px] text-zinc-200 truncate flex-1">{doc.displayName}</span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          aria-label={`Delete ${doc.displayName}`}
+          title="Delete"
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-zinc-500 hover:text-red-400 shrink-0 p-0.5"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 6h18" />
+            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+          </svg>
+        </button>
       </div>
       <div className="mt-1 flex items-center gap-2 text-[10px] text-zinc-600 font-mono">
         <span>{formatBytes(doc.bytes)}</span>
@@ -130,7 +160,7 @@ function FileRow({
           )}
         </div>
       )}
-    </button>
+    </div>
   );
 }
 

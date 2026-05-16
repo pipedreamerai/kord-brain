@@ -36,6 +36,8 @@ export type GraphSnapshot = {
   stats: { pages: number; links: number };
 };
 
+export type RootView = 'files' | 'graph';
+
 type AppState = {
   docs: UploadedDoc[];
   graph: GraphSnapshot;
@@ -43,9 +45,12 @@ type AppState = {
   uploadError: string | null;
   lastUploadCount: number;
   hydrated: boolean;
+  view: RootView;
 
+  setView: (view: RootView) => void;
   hydrate: () => Promise<void>;
   uploadFiles: (files: File[]) => Promise<void>;
+  deleteDoc: (slug: string) => Promise<void>;
   refreshGraph: () => Promise<void>;
 };
 
@@ -58,6 +63,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   uploadError: null,
   lastUploadCount: 0,
   hydrated: false,
+  view: 'files',
+
+  setView: (view) => set({ view }),
 
   hydrate: async () => {
     if (get().hydrated) return;
@@ -101,10 +109,28 @@ export const useAppStore = create<AppState>((set, get) => ({
           : null,
       });
       await get().refreshGraph();
+      if (data.uploaded.length > 0) set({ view: 'graph' });
     } catch (err) {
       set({ uploadError: err instanceof Error ? err.message : String(err) });
     } finally {
       set({ uploading: false });
+    }
+  },
+
+  deleteDoc: async (slug: string) => {
+    const doc = get().docs.find((d) => d.slug === slug);
+    if (!doc) return;
+    set({ uploadError: null });
+    try {
+      const res = await fetch(`/api/uploads/${encodeURIComponent(doc.filename)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error(`delete HTTP ${res.status}`);
+      set({ docs: get().docs.filter((d) => d.slug !== slug) });
+      await get().refreshGraph();
+      set({ view: 'graph' });
+    } catch (err) {
+      set({ uploadError: err instanceof Error ? err.message : String(err) });
     }
   },
 }));
