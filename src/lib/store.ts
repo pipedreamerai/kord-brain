@@ -15,6 +15,7 @@ type DemoState = {
   setHighlights: (highlights: Highlight[]) => void;
   clearHighlights: () => void;
   selectTag: (tag: Tag, locations: TagLocation[]) => void;
+  applyBeatHighlights: (highlights: Highlight[]) => void;
 };
 
 export const useDemoStore = create<DemoState>((set) => ({
@@ -30,6 +31,14 @@ export const useDemoStore = create<DemoState>((set) => ({
       return {
         highlights,
         activeDoc: first ? first.slug : state.activeDoc,
+      };
+    }),
+  applyBeatHighlights: (highlights) =>
+    set((state) => {
+      const first = highlights[0];
+      return {
+        highlights,
+        activeDoc: first ? first.location.slug : state.activeDoc,
       };
     }),
 }));

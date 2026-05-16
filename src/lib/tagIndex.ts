@@ -41,7 +41,7 @@ export type DocPayloadPdf = {
   kind: 'pdf';
   pages: { number: number; width: number; height: number }[];
 };
-export type DocPayloadDocx = { kind: 'docx'; html: string };
+export type DocPayloadDocx = { kind: 'docx'; html: string; text: string };
 export type DocPayloadXlsx = {
   kind: 'xlsx';
   sheets: { name: string; header: string[]; rows: string[][] }[];
@@ -91,7 +91,7 @@ export async function getTagIndex(): Promise<{ tagIndex: TagIndex; docs: DocPayl
           snippet: o.snippet,
         });
       }
-      docs[meta.slug] = { kind: 'docx', html: info.html };
+      docs[meta.slug] = { kind: 'docx', html: info.html, text: info.text };
     } else if (meta.kind === 'xlsx') {
       const info = await loadXlsx(samplesDir, meta.filename);
       for (const r of info.tagRows) {

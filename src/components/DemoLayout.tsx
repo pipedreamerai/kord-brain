@@ -115,7 +115,7 @@ export function DemoLayout({ tagIndex, docs }: Props) {
         </main>
 
         <aside className="w-80 border-l border-zinc-200 bg-white overflow-y-auto">
-          <WalkthroughPanel />
+          <WalkthroughPanel tagIndex={tagIndex} />
         </aside>
       </div>
     </div>

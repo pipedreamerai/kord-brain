@@ -12,6 +12,7 @@ export type DocxOccurrence = {
 export type DocxDocInfo = {
   filename: string;
   html: string;
+  text: string;
   occurrences: DocxOccurrence[];
 };
 
@@ -19,6 +20,7 @@ export async function loadDocx(samplesDir: string, filename: string): Promise<Do
   const buf = await readFile(path.join(samplesDir, filename));
   // mammoth wants a Buffer in Node; types accept { buffer: Buffer }
   const { value: rawHtml } = await mammoth.convertToHtml({ buffer: buf });
+  const { value: text } = await mammoth.extractRawText({ buffer: buf });
 
   const counters: Record<string, number> = {};
   const occurrences: DocxOccurrence[] = [];
@@ -40,7 +42,7 @@ export async function loadDocx(samplesDir: string, filename: string): Promise<Do
     return `<mark id="${anchorId}" data-tag="${tag}" data-occurrence="${n}" class="kb-tag">${tag}</mark>`;
   });
 
-  return { filename, html: wrapped, occurrences };
+  return { filename, html: wrapped, text: text.trim(), occurrences };
 }
 
 function extractSnippet(html: string, offset: number, radius: number): string {
