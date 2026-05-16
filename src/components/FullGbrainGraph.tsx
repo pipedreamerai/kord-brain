@@ -1,178 +1,265 @@
 'use client';
 
+import dynamic from 'next/dynamic';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import * as THREE from 'three';
+
+type ForceGraphHandle = {
+  d3Force: (name: string) => { strength?: (n: number) => unknown; distance?: (n: number) => unknown } | undefined;
+  cameraPosition: (
+    pos: { x: number; y: number; z: number },
+    lookAt?: { x: number; y: number; z: number },
+    transitionMs?: number,
+  ) => void;
+};
+
 export type BrainNode = { slug: string; title: string; kind: string };
 export type BrainEdge = { from: string; to: string; kind: string };
+
+const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false }) as unknown as React.ComponentType<Record<string, unknown>>;
 
 type Props = {
   nodes: BrainNode[];
   edges: BrainEdge[];
 };
 
-const W = 520;
-const H = 380;
-const CX = W / 2;
-const CY = H / 2;
-const INNER_R = 90;   // document ring
-const OUTER_R = 162;  // tag ring
-const OTHER_R = 200;  // unknown / misc
-const NODE_R = 8;
-const ROOT_R = 13;
+type GNode = BrainNode & {
+  id: string;
+  label: string;
+  color: string;
+  size: number;
+  fx?: number;
+  fy?: number;
+  fz?: number;
+};
+type GLink = { source: string; target: string; kind: string };
 
-function nodeFill(kind: string): string {
-  if (kind === 'document') return '#6366f1';
-  if (kind === 'tag') return '#f59e0b';
-  return '#71717a';
-}
-function nodeStroke(kind: string): string {
-  if (kind === 'document') return '#4338ca';
-  if (kind === 'tag') return '#b45309';
-  return '#52525b';
-}
-function labelFill(kind: string): string {
-  if (kind === 'document') return '#c7d2fe';
-  if (kind === 'tag') return '#fde68a';
-  return '#a1a1aa';
-}
+const BRAIN_ID = '__brain__';
 
-function truncate(s: string, max = 13): string {
-  return s.length <= max ? s : s.slice(0, max - 1) + '…';
+const COLORS = {
+  document: '#818cf8',
+  tag: '#fbbf24',
+  root: '#10b981',
+  other: '#a1a1aa',
+} as const;
+
+function colorFor(kind: string): string {
+  if (kind === 'document') return COLORS.document;
+  if (kind === 'tag') return COLORS.tag;
+  if (kind === 'root') return COLORS.root;
+  return COLORS.other;
 }
 
-function placeNodes(nodes: BrainNode[]) {
-  const docs = nodes.filter(n => n.kind === 'document');
-  const tags = nodes.filter(n => n.kind === 'tag');
-  const others = nodes.filter(n => n.kind !== 'document' && n.kind !== 'tag');
-  const positions = new Map<string, { x: number; y: number }>();
-
-  const place = (list: BrainNode[], r: number, offsetAngle = -Math.PI / 2) => {
-    list.forEach((n, i) => {
-      const angle = offsetAngle + (i / Math.max(1, list.length)) * Math.PI * 2;
-      positions.set(n.slug, {
-        x: CX + Math.cos(angle) * r,
-        y: CY + Math.sin(angle) * r,
-      });
-    });
-  };
-
-  place(docs, INNER_R, -Math.PI / 2);
-  place(tags, OUTER_R, -Math.PI / 2);
-  place(others, OTHER_R, 0);
-  return positions;
+function sizeFor(kind: string): number {
+  if (kind === 'root') return 9;
+  if (kind === 'document') return 6;
+  if (kind === 'tag') return 5;
+  return 4;
 }
 
 export function FullGbrainGraph({ nodes, edges }: Props) {
-  const positions = placeNodes(nodes);
+  const fgRef = useRef<ForceGraphHandle | undefined>(undefined);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const [hovered, setHovered] = useState<GNode | null>(null);
+
+  useEffect(() => {
+    if (!wrapRef.current) return;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0].contentRect;
+      setSize({ w: r.width, h: r.height });
+    });
+    ro.observe(wrapRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  const data = useMemo(() => {
+    const gnodes: GNode[] = nodes.map((n) => ({
+      ...n,
+      id: n.slug,
+      label: n.title || n.slug,
+      color: colorFor(n.kind),
+      size: sizeFor(n.kind),
+    }));
+    const ids = new Set(gnodes.map((n) => n.id));
+    const glinks: GLink[] = edges
+      .filter((e) => ids.has(e.from) && ids.has(e.to))
+      .map((e) => ({ source: e.from, target: e.to, kind: e.kind }));
+
+    if (gnodes.length > 0) {
+      gnodes.push({
+        slug: BRAIN_ID,
+        title: 'brain',
+        kind: 'root',
+        id: BRAIN_ID,
+        label: 'brain',
+        color: colorFor('root'),
+        size: sizeFor('root'),
+        fx: 0,
+        fy: 0,
+        fz: 0,
+      });
+      for (const n of nodes) {
+        if (n.kind === 'document') {
+          glinks.push({ source: BRAIN_ID, target: n.slug, kind: 'root' });
+        }
+      }
+    }
+
+    return { nodes: gnodes, links: glinks };
+  }, [nodes, edges]);
+
+  useEffect(() => {
+    const fg = fgRef.current;
+    if (!fg) return;
+    fg.d3Force('charge')?.strength?.(-120);
+    fg.d3Force('link')?.distance?.(36);
+  }, [data]);
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="w-full h-full select-none"
-      aria-label="gbrain knowledge graph"
+    <div
+      ref={wrapRef}
+      className="w-full h-full relative bg-zinc-950"
+      style={{
+        background:
+          'radial-gradient(ellipse at center, #0b0b12 0%, #050507 70%, #000 100%)',
+      }}
     >
-      <defs>
-        <marker
-          id="gb-arrow"
-          viewBox="0 0 8 8"
-          refX="7"
-          refY="4"
-          markerWidth="4"
-          markerHeight="4"
-          orient="auto-start-reverse"
-        >
-          <path d="M0,0 L8,4 L0,8 z" fill="#3f3f46" />
-        </marker>
-        <radialGradient id="brain-glow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-        </radialGradient>
-      </defs>
+      {size.w > 0 && size.h > 0 && (
+        <ForceGraph3D
+          ref={fgRef}
+          width={size.w}
+          height={size.h}
+          graphData={data}
+          backgroundColor="rgba(0,0,0,0)"
+          showNavInfo={false}
+          nodeLabel={(n: unknown) => {
+            const node = n as GNode;
+            return `<div style="
+              font: 500 11px ui-monospace, SFMono-Regular, monospace;
+              color: #e4e4e7;
+              background: rgba(9,9,11,0.92);
+              border: 1px solid #27272a;
+              padding: 4px 8px;
+              border-radius: 4px;
+              max-width: 260px;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            ">
+              <span style="color:${node.color}">●</span> ${escapeHtml(node.label)}
+              <div style="color:#71717a;font-size:10px;margin-top:2px">${node.kind}</div>
+            </div>`;
+          }}
+          nodeThreeObject={(n: unknown) => {
+            const node = n as GNode;
+            const isBrain = node.id === BRAIN_ID;
+            const group = new THREE.Group();
+            const geo = new THREE.SphereGeometry(node.size, 24, 24);
+            const mat = new THREE.MeshStandardMaterial({
+              color: node.color,
+              emissive: node.color,
+              emissiveIntensity: isBrain ? 0.9 : 0.45,
+              roughness: 0.35,
+              metalness: 0.15,
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            group.add(mesh);
 
-      {/* Ring guides */}
-      {nodes.some(n => n.kind === 'document') && (
-        <circle cx={CX} cy={CY} r={INNER_R} fill="none" stroke="#27272a" strokeWidth={0.5} strokeDasharray="4,4" />
+            const glowMat = new THREE.MeshBasicMaterial({
+              color: node.color,
+              transparent: true,
+              opacity: isBrain ? 0.32 : 0.18,
+            });
+            const glow = new THREE.Mesh(
+              new THREE.SphereGeometry(node.size * (isBrain ? 2.4 : 1.8), 16, 16),
+              glowMat,
+            );
+            group.add(glow);
+
+            if (isBrain) {
+              const outerGlow = new THREE.Mesh(
+                new THREE.SphereGeometry(node.size * 4, 16, 16),
+                new THREE.MeshBasicMaterial({
+                  color: node.color,
+                  transparent: true,
+                  opacity: 0.07,
+                }),
+              );
+              group.add(outerGlow);
+            }
+
+            return group;
+          }}
+          linkColor={() => 'rgba(120,120,140,0.35)'}
+          linkWidth={0.6}
+          linkOpacity={0.5}
+          linkDirectionalParticles={2}
+          linkDirectionalParticleWidth={1.4}
+          linkDirectionalParticleSpeed={0.006}
+          linkDirectionalParticleColor={(l: unknown) => {
+            const link = l as GLink;
+            const targetId =
+              typeof link.target === 'string'
+                ? link.target
+                : (link.target as { id?: string })?.id ?? '';
+            const node = data.nodes.find((n) => n.id === targetId);
+            return node?.color ?? '#10b981';
+          }}
+          enableNodeDrag
+          onNodeHover={(n: unknown) => setHovered((n as GNode | null) ?? null)}
+          onNodeClick={(n: unknown) => {
+            const node = n as GNode;
+            const fg = fgRef.current;
+            if (!fg) return;
+            const distance = 80;
+            const obj = node as unknown as { x?: number; y?: number; z?: number };
+            const x = obj.x ?? 0;
+            const y = obj.y ?? 0;
+            const z = obj.z ?? 0;
+            const r = Math.hypot(x, y, z) || 1;
+            fg.cameraPosition(
+              { x: x * (1 + distance / r), y: y * (1 + distance / r), z: z * (1 + distance / r) },
+              { x, y, z },
+              900,
+            );
+          }}
+        />
       )}
-      {nodes.some(n => n.kind === 'tag') && (
-        <circle cx={CX} cy={CY} r={OUTER_R} fill="none" stroke="#27272a" strokeWidth={0.5} strokeDasharray="4,4" />
+
+      <div className="pointer-events-none absolute bottom-2 left-2 text-[10px] font-mono text-zinc-500 flex flex-col gap-0.5">
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block w-2 h-2 rounded-full" style={{ background: COLORS.document }} />
+          <span>document</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block w-2 h-2 rounded-full" style={{ background: COLORS.tag }} />
+          <span>tag</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block w-2 h-2 rounded-full" style={{ background: COLORS.root }} />
+          <span>root</span>
+        </div>
+      </div>
+
+      <div className="pointer-events-none absolute bottom-2 right-2 text-[10px] font-mono text-zinc-600">
+        drag · scroll · click
+      </div>
+
+      {hovered && (
+        <div className="pointer-events-none absolute top-2 left-2 text-[11px] font-mono text-zinc-300 bg-zinc-950/80 border border-zinc-800 px-2 py-1 rounded max-w-[60%] truncate">
+          <span style={{ color: hovered.color }}>●</span> {hovered.label}
+        </div>
       )}
-
-      {/* Center brain node */}
-      <circle cx={CX} cy={CY} r={ROOT_R + 8} fill="url(#brain-glow)" />
-      <circle cx={CX} cy={CY} r={ROOT_R} fill="#10b981" stroke="#059669" strokeWidth={1.5}>
-        <animate attributeName="r" values={`${ROOT_R};${ROOT_R + 2};${ROOT_R}`} dur="3s" repeatCount="indefinite" />
-      </circle>
-      <text
-        x={CX}
-        y={CY + 4}
-        textAnchor="middle"
-        style={{ font: '700 8px ui-monospace, SFMono-Regular, monospace', fill: 'white' }}
-      >
-        brain
-      </text>
-
-      {/* Edges */}
-      {edges.map((e, i) => {
-        const a = positions.get(e.from);
-        const b = positions.get(e.to);
-        if (!a || !b) return null;
-        const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-        const ux = (b.x - a.x) / len;
-        const uy = (b.y - a.y) / len;
-        const fromR = NODE_R + 1;
-        const toR = NODE_R + 2;
-        return (
-          <line
-            key={`e-${i}`}
-            x1={a.x + ux * fromR}
-            y1={a.y + uy * fromR}
-            x2={b.x - ux * toR}
-            y2={b.y - uy * toR}
-            stroke="#3f3f46"
-            strokeWidth={0.8}
-            markerEnd="url(#gb-arrow)"
-          >
-            <animate attributeName="opacity" from="0" to="1" dur="0.4s" fill="freeze" />
-          </line>
-        );
-      })}
-
-      {/* Nodes */}
-      {nodes.map(n => {
-        const pos = positions.get(n.slug);
-        if (!pos) return null;
-        const angle = Math.atan2(pos.y - CY, pos.x - CX);
-        const cosA = Math.cos(angle);
-        const sinA = Math.sin(angle);
-        const anchor: 'start' | 'middle' | 'end' =
-          cosA > 0.25 ? 'start' : cosA < -0.25 ? 'end' : 'middle';
-        const lx = pos.x + cosA * (NODE_R + 7);
-        const ly = pos.y + sinA * (NODE_R + 7) + (sinA > 0 ? 9 : 0);
-
-        return (
-          <g key={n.slug}>
-            <title>{n.title}</title>
-            <circle
-              cx={pos.x}
-              cy={pos.y}
-              r={NODE_R}
-              fill={nodeFill(n.kind)}
-              stroke={nodeStroke(n.kind)}
-              strokeWidth={1.5}
-            >
-              <animate attributeName="r" from="0" to={String(NODE_R)} dur="0.35s" fill="freeze" />
-              <animate attributeName="opacity" from="0" to="1" dur="0.35s" fill="freeze" />
-            </circle>
-            <text
-              x={lx}
-              y={ly}
-              textAnchor={anchor}
-              style={{ font: '500 8px ui-monospace, SFMono-Regular, monospace', fill: labelFill(n.kind) }}
-            >
-              <animate attributeName="opacity" from="0" to="1" dur="0.5s" fill="freeze" />
-              {truncate(n.slug)}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
+    </div>
   );
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
