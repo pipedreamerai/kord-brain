@@ -16,6 +16,22 @@ export async function GET() {
   return NextResponse.json({ docs, tagIndex });
 }
 
+/**
+ * POST returns an NDJSON stream so the client can grow the graph as pages
+ * come back from Claude vision instead of waiting for the whole upload to finish.
+ *
+ * Events (one JSON object per line):
+ *   {type:'start',        total}
+ *   {type:'file-start',   filename, index, total}
+ *   {type:'parse-start',  filename, kind}
+ *   {type:'page-vision',  filename, page, tags, summary, source}
+ *   {type:'gbrain-doc',   filename, slug}
+ *   {type:'gbrain-tag',   filename, tag, tagSlug, i, of}
+ *   {type:'parsed',       filename, tags, pageCount}
+ *   {type:'file-done',    filename, doc}
+ *   {type:'file-error',   filename, error}
+ *   {type:'all-done',     uploaded, errors, docs, tagIndex}
+ */
 export async function POST(req: NextRequest) {
   const form = await req.formData();
   const entries = form.getAll('files');
@@ -28,7 +44,12 @@ export async function POST(req: NextRequest) {
     async start(controller) {
       const enc = new TextEncoder();
       const emit = (obj: unknown) => {
-        controller.enqueue(enc.encode(JSON.stringify(obj) + '\n'));
+        try {
+          controller.enqueue(enc.encode(JSON.stringify(obj) + '\n'));
+        } catch {
+          // Controller may be closed if the client disconnected mid-upload.
+          // Server-side ingestion keeps running (write-through to gbrain).
+        }
       };
 
       emit({ type: 'start', total: files.length });

@@ -15,6 +15,9 @@ export type UploadPdfPayload = {
   kind: 'pdf';
   pages: { number: number; width: number; height: number }[];
   tagLocations: Record<string, PdfTagLocation[]>;
+  kindsByTag?: Record<string, string>;
+  descriptionsByTag?: Record<string, string>;
+  summaryByPage?: Record<number, string>;
 };
 export type UploadDocxPayload = {
   kind: 'docx';
@@ -225,6 +228,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ uploadProgress: { ...get().uploadProgress, ...patch } });
     };
 
+    // Per-tag pushes happen incrementally as vision returns; we want the graph
+    // to animate during the upload, not just at the end. Coalesce: at most one
+    // refresh in flight at a time.
     let pendingGraphRefresh: Promise<void> | null = null;
     const scheduleGraphRefresh = () => {
       if (pendingGraphRefresh) return;
@@ -293,6 +299,26 @@ export const useAppStore = create<AppState>((set, get) => ({
               });
               break;
             }
+            case 'page-vision': {
+              const page = Number(msg.page ?? 0);
+              const tags = Array.isArray(msg.tags) ? (msg.tags as string[]) : [];
+              const source = String(msg.source ?? '');
+              const summary =
+                typeof msg.summary === 'string' && msg.summary.length > 0
+                  ? ` — ${msg.summary.slice(0, 80)}${msg.summary.length > 80 ? '…' : ''}`
+                  : '';
+              const label =
+                source === 'text-layer'
+                  ? `text-layer`
+                  : source === 'vision-failed'
+                    ? `vision failed`
+                    : `vision`;
+              updateProgress({
+                currentStep: `Page ${page}: ${tags.length} tag${tags.length === 1 ? '' : 's'} (${label})`,
+              });
+              pushNote(`  page ${page} (${label}): ${tags.length} tag${tags.length === 1 ? '' : 's'}${summary}`);
+              break;
+            }
             case 'parsed': {
               const tags = Array.isArray(msg.tags) ? (msg.tags as string[]) : [];
               const pageCount = typeof msg.pageCount === 'number' ? msg.pageCount : null;
@@ -301,7 +327,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                 : `${tags.length} tag${tags.length === 1 ? '' : 's'}`;
               updateProgress({
                 currentStep: `Found ${detail}`,
-                currentFraction: 0.35,
+                currentFraction: 0.95,
               });
               pushNote(`  parsed — ${detail}`);
               break;
@@ -324,6 +350,9 @@ export const useAppStore = create<AppState>((set, get) => ({
                 currentFraction: fraction,
               });
               pushNote(`  link → ${tag} (${i}/${of})`);
+              // Each tag adds a node + edge; refresh the graph so it animates
+              // alongside the notes feed instead of waiting for file-done.
+              scheduleGraphRefresh();
               break;
             }
             case 'file-done': {

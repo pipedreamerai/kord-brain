@@ -1,9 +1,10 @@
 /**
  * Client for the Python pdf-extractor sidecar (see services/pdf-extractor/).
  *
- * One round-trip returns per-page text + word bboxes + vector-path counts,
- * with Tesseract OCR fallback inside the sidecar for raster-only pages.
- * That replaces the old in-process pdfjs-dist + Claude vision two-pass.
+ * The sidecar renders each page to a base64 JPEG, returns the embedded text
+ * layer, and returns word-level spans (bboxes) from the text layer when one
+ * exists. The orchestrator (pdf.ts) decides whether to use the text layer or
+ * to send the image to Claude vision (vision-extractor.ts).
  */
 
 export type ExtractedSpan = {
@@ -14,19 +15,23 @@ export type ExtractedSpan = {
 
 export type ExtractedPage = {
   number: number;
+  /** PDF user-space points. */
   width: number;
   height: number;
-  text: string;
+  /** Base64-encoded JPEG of the rendered page. */
+  imageB64: string;
+  imageMime: string;
+  /** Original PDF text layer. Empty string for raster pages. */
+  textLayer: string;
+  /** Word-level spans from the text layer. Empty array for raster pages. */
   spans: ExtractedSpan[];
   vectorPaths: number;
-  source: 'text' | 'ocr' | 'empty';
 };
 
 export type ExtractedPdf = {
   pageCount: number;
   pages: ExtractedPage[];
   elapsedMs: number;
-  anyOcr: boolean;
 };
 
 // 127.0.0.1, not localhost — Node 18+ fetch resolves "localhost" to ::1 first,
@@ -78,30 +83,37 @@ export async function extractPdf(
       number: number;
       width: number;
       height: number;
-      text: string;
+      image_b64: string;
+      image_mime: string;
+      text_layer: string;
       spans: Array<{ text: string; bbox: number[] }>;
       vector_paths: number;
-      source: ExtractedPage['source'];
     }>;
     elapsed_ms: number;
-    any_ocr: boolean;
   };
+
+  const rawPages = json.pages ?? [];
+  if (rawPages.length === 0 && json.page_count > 0) {
+    throw new Error(
+      'pdf-extractor returned page_count but no pages array — rebuild the sidecar: docker compose up -d --build pdf-extractor',
+    );
+  }
 
   return {
     pageCount: json.page_count,
-    pages: json.pages.map((p) => ({
+    pages: rawPages.map((p) => ({
       number: p.number,
       width: p.width,
       height: p.height,
-      text: p.text,
-      spans: p.spans.map((s) => ({
+      imageB64: p.image_b64,
+      imageMime: p.image_mime,
+      textLayer: p.text_layer ?? '',
+      spans: (p.spans ?? []).map((s) => ({
         text: s.text,
-        bbox: [s.bbox[0], s.bbox[1], s.bbox[2], s.bbox[3]],
+        bbox: [s.bbox[0], s.bbox[1], s.bbox[2], s.bbox[3]] as [number, number, number, number],
       })),
-      vectorPaths: p.vector_paths,
-      source: p.source,
+      vectorPaths: p.vector_paths ?? 0,
     })),
     elapsedMs: json.elapsed_ms,
-    anyOcr: json.any_ocr,
   };
 }

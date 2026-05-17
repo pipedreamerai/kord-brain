@@ -1,6 +1,12 @@
 import { mkdir, readFile, writeFile, readdir, stat, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { loadPdf, type PdfPageInfo, type PdfTagLocations } from './ingestion/pdf';
+import {
+  loadPdf,
+  type PdfPageInfo,
+  type PdfPageEvent,
+  type PdfTagLocations,
+} from './ingestion/pdf';
+import type { TagKind } from './ingestion/vision-extractor';
 import { loadDocx } from './ingestion/docx';
 import { loadXlsx, type XlsxSheet, type XlsxTagRow } from './ingestion/xlsx';
 import * as gbrain from './gbrain';
@@ -12,6 +18,9 @@ export type UploadPdfPayload = {
   kind: 'pdf';
   pages: PdfPageInfo[];
   tagLocations: PdfTagLocations;
+  kindsByTag?: Record<string, TagKind>;
+  descriptionsByTag?: Record<string, string>;
+  summaryByPage?: Record<number, string>;
 };
 export type UploadDocxPayload = {
   kind: 'docx';
@@ -36,11 +45,22 @@ export type UploadedDoc = {
   payload: UploadPayload;
 };
 
+/**
+ * Progress events emitted as `ingestUpload` runs. The route handler forwards
+ * each event to the client over NDJSON so the upload progress feed can show
+ * what's happening live.
+ *
+ * `gbrain-tag` events use cumulative counts that grow as pages stream in
+ * (vision runs in parallel; `of` is the running total of distinct tags seen
+ * so far). The UI's fraction will occasionally tick down when a new page
+ * adds many fresh tags — that's expected with parallel discovery.
+ */
 export type IngestProgress =
   | { type: 'parse-start'; filename: string; kind: UploadKind }
-  | { type: 'parsed'; filename: string; tags: string[]; pageCount?: number }
+  | { type: 'page-vision'; filename: string; page: number; tags: string[]; summary: string; source: PdfPageEvent['source'] }
   | { type: 'gbrain-doc'; filename: string; slug: string }
-  | { type: 'gbrain-tag'; filename: string; tag: string; tagSlug: string; i: number; of: number };
+  | { type: 'gbrain-tag'; filename: string; tag: string; tagSlug: string; i: number; of: number }
+  | { type: 'parsed'; filename: string; tags: string[]; pageCount?: number };
 
 type ProgressFn = (ev: IngestProgress) => void;
 
@@ -111,11 +131,28 @@ async function parseFile(
   kind: UploadKind,
   buf: Buffer,
   filename: string,
+  opts: {
+    onPageDone?: (ev: PdfPageEvent) => void | Promise<void>;
+    /** Skip vision for cache-reload paths so server restart doesn't re-pay
+     *  Claude vision for every cached PDF. Tags survive in meta.json. */
+    skipVision?: boolean;
+  } = {},
 ): Promise<{ payload: UploadPayload; tags: string[] }> {
   if (kind === 'pdf') {
-    const info = await loadPdf(buf, { filename });
+    const info = await loadPdf(buf, {
+      filename,
+      onPageDone: opts.onPageDone,
+      skipVision: opts.skipVision,
+    });
     return {
-      payload: { kind: 'pdf', pages: info.pages, tagLocations: info.tagLocations },
+      payload: {
+        kind: 'pdf',
+        pages: info.pages,
+        tagLocations: info.tagLocations,
+        kindsByTag: info.kindsByTag,
+        descriptionsByTag: info.descriptionsByTag,
+        summaryByPage: info.summaryByPage,
+      },
       tags: info.tags,
     };
   }
@@ -127,8 +164,18 @@ async function parseFile(
   return { payload: { kind: 'xlsx', sheets: info.sheets, tagRows: info.tagRows }, tags: info.tags };
 }
 
-function buildDocMarkdown(displayName: string, kind: UploadKind, tags: string[]): string {
+function buildDocMarkdown(
+  displayName: string,
+  kind: UploadKind,
+  tags: string[],
+  summaryByPage: Record<number, string> = {},
+): string {
   const tagList = tags.map((t) => `- [[${tagToSlug(t)}]] — ${t}`).join('\n');
+  const pageNums = Object.keys(summaryByPage)
+    .map((n) => parseInt(n, 10))
+    .filter((n) => !Number.isNaN(n) && summaryByPage[n])
+    .sort((a, b) => a - b);
+  const pageSummaries = pageNums.map((n) => `### Page ${n}\n\n${summaryByPage[n]}`).join('\n\n');
   return `---
 title: ${displayName}
 type: document
@@ -139,58 +186,73 @@ kind: ${kind}
 
 Uploaded ${kind.toUpperCase()} document.
 
-## Tags
+${pageSummaries ? `## Page summaries\n\n${pageSummaries}\n\n` : ''}## Tags
 
 ${tagList || '_no tags detected_'}
 `;
 }
 
-function buildTagMarkdown(tag: string, mentionedBy: string[]): string {
+function buildTagMarkdown(
+  tag: string,
+  mentionedBy: string[],
+  tagKind?: TagKind,
+  description?: string,
+): string {
   const list = mentionedBy.map((m) => `- [[${m}]]`).join('\n');
+  const descSection = description?.trim()
+    ? `\n## Description\n\n${description.trim()}\n`
+    : '';
   return `---
 title: ${tag}
 type: tag
----
+${tagKind ? `tag_kind: ${tagKind}\n` : ''}---
 
 # ${tag}
 
-Engineering tag discovered in uploaded documents.
-
+${tagKind ? `Engineering tag (${tagKind.replace(/_/g, ' ')}) discovered in uploaded documents.` : 'Engineering tag discovered in uploaded documents.'}
+${descSection}
 ## Mentioned in
 
 ${list || '_no documents_'}
 `;
 }
 
-async function pushToGbrain(doc: UploadedDoc, onProgress?: ProgressFn) {
-  onProgress?.({ type: 'gbrain-doc', filename: doc.displayName, slug: doc.slug });
-  await gbrain.putPage(doc.slug, buildDocMarkdown(doc.displayName, doc.kind, doc.tags));
-  // Upsert each tag page with a mention back to this doc.
-  const total = doc.tags.length;
-  for (let i = 0; i < total; i++) {
-    const tag = doc.tags[i];
-    const tagSlug = tagToSlug(tag);
-    onProgress?.({
-      type: 'gbrain-tag',
-      filename: doc.displayName,
-      tag,
-      tagSlug,
-      i: i + 1,
-      of: total,
-    });
-    // Read existing mentions if any so we don't clobber.
-    let mentions: string[] = [];
-    const existing = await gbrain.getPage(tagSlug);
-    if (existing) {
-      const m = existing.markdown.match(/## Mentioned in\n+([\s\S]*)$/);
-      if (m) {
-        mentions = [...m[1].matchAll(/\[\[([^\]]+)\]\]/g)].map((x) => x[1]);
-      }
+async function upsertTagPage(
+  docSlug: string,
+  tag: string,
+  tagKind: TagKind | undefined,
+  description?: string,
+): Promise<void> {
+  const tagSlug = tagToSlug(tag);
+  let mentions: string[] = [];
+  let existingDescription: string | undefined;
+  const existing = await gbrain.getPage(tagSlug);
+  if (existing) {
+    const m = existing.markdown.match(/## Mentioned in\n+([\s\S]*)$/);
+    if (m) {
+      mentions = [...m[1].matchAll(/\[\[([^\]]+)\]\]/g)].map((x) => x[1]);
     }
-    if (!mentions.includes(doc.slug)) mentions.push(doc.slug);
-    await gbrain.putPage(tagSlug, buildTagMarkdown(tag, mentions));
-    await gbrain.link(doc.slug, tagSlug, 'mentions');
+    const d = existing.markdown.match(/## Description\n+([\s\S]*?)\n+## /);
+    if (d) existingDescription = d[1].trim();
   }
+  if (!mentions.includes(docSlug)) mentions.push(docSlug);
+  // Keep an existing description if the current page didn't surface one.
+  const finalDescription = description ?? existingDescription;
+  await gbrain.putPage(
+    tagSlug,
+    buildTagMarkdown(tag, mentions, tagKind, finalDescription),
+  );
+  await gbrain.link(docSlug, tagSlug, 'mentions');
+}
+
+async function writeDocPage(
+  slug: string,
+  displayName: string,
+  kind: UploadKind,
+  tags: string[],
+  summaryByPage: Record<number, string>,
+): Promise<void> {
+  await gbrain.putPage(slug, buildDocMarkdown(displayName, kind, tags, summaryByPage));
 }
 
 export async function loadCache(): Promise<Map<string, UploadedDoc>> {
@@ -201,7 +263,11 @@ export async function loadCache(): Promise<Map<string, UploadedDoc>> {
   for (const entry of meta.docs) {
     try {
       const buf = await readFile(path.join(UPLOADS_DIR, entry.filename));
-      const { payload } = await parseFile(entry.kind, buf, entry.filename);
+      // skipVision: vision was already paid for at upload time; tags survive
+      // in meta.json. Server restart should not re-trigger Claude vision.
+      const { payload } = await parseFile(entry.kind, buf, entry.filename, {
+        skipVision: true,
+      });
       cache.set(entry.slug, { ...entry, payload });
     } catch {
       // Stale meta entry — skip.
@@ -230,8 +296,102 @@ export async function ingestUpload(
 
   const baseSlug = slugFromFilename(safeName);
   const slug = await uniqueSlug(baseSlug);
+
   onProgress?.({ type: 'parse-start', filename, kind });
-  const { payload, tags } = await parseFile(kind, buf, filename);
+
+  // Incremental gbrain push: as each page returns, push its tags into gbrain
+  // BEFORE the next page does, so the client's graph view animates as Claude
+  // works. Vision calls run in parallel (Promise.all in pdf.ts); the gbrain
+  // pushes serialise via a promise chain so concurrent same-slug writes don't
+  // race each other.
+  const seenTags = new Set<string>();
+  const summaryByPage: Record<number, string> = {};
+  const kindsByTag: Record<string, TagKind> = {};
+  const descriptionsByTag: Record<string, string> = {};
+  let docWritten = false;
+  let cumulativePushed = 0;
+  let pushQueue: Promise<unknown> = Promise.resolve();
+
+  const internalOnPageDone = (ev: PdfPageEvent): Promise<void> => {
+    const stash = ev as PdfPageEvent & {
+      kinds?: Record<string, TagKind>;
+      descriptions?: Record<string, string>;
+    };
+    const pageKinds = stash.kinds ?? {};
+    const pageDescriptions = stash.descriptions ?? {};
+    // Accumulate state synchronously so the queued work uses the latest set.
+    summaryByPage[ev.page] = ev.summary;
+    for (const t of ev.tags) {
+      seenTags.add(t);
+      if (pageKinds[t] && !kindsByTag[t]) kindsByTag[t] = pageKinds[t];
+      if (pageDescriptions[t] && !descriptionsByTag[t]) {
+        descriptionsByTag[t] = pageDescriptions[t];
+      }
+    }
+    onProgress?.({
+      type: 'page-vision',
+      filename,
+      page: ev.page,
+      tags: ev.tags,
+      summary: ev.summary,
+      source: ev.source,
+    });
+    pushQueue = pushQueue.then(async () => {
+      await writeDocPage(slug, filename, kind, [...seenTags], summaryByPage);
+      if (!docWritten) {
+        onProgress?.({ type: 'gbrain-doc', filename, slug });
+        docWritten = true;
+      }
+      for (const t of ev.tags) {
+        const tagSlug = tagToSlug(t);
+        cumulativePushed += 1;
+        onProgress?.({
+          type: 'gbrain-tag',
+          filename,
+          tag: t,
+          tagSlug,
+          i: cumulativePushed,
+          of: seenTags.size,
+        });
+        await upsertTagPage(slug, t, kindsByTag[t], descriptionsByTag[t]);
+      }
+    });
+    return pushQueue as Promise<void>;
+  };
+
+  const { payload, tags } = await parseFile(kind, buf, filename, {
+    onPageDone: internalOnPageDone,
+  });
+
+  // Belt-and-suspenders: DOCX/XLSX (and PDFs whose every page failed vision)
+  // don't fire onPageDone, so make sure the doc page and any remaining tags
+  // land in gbrain regardless.
+  if (!docWritten) {
+    await writeDocPage(slug, filename, kind, tags, summaryByPage);
+    onProgress?.({ type: 'gbrain-doc', filename, slug });
+    docWritten = true;
+  }
+  const total = tags.length;
+  for (let i = 0; i < total; i++) {
+    const t = tags[i];
+    if (seenTags.has(t)) continue;
+    seenTags.add(t);
+    const tagSlug = tagToSlug(t);
+    cumulativePushed += 1;
+    onProgress?.({
+      type: 'gbrain-tag',
+      filename,
+      tag: t,
+      tagSlug,
+      i: cumulativePushed,
+      of: total,
+    });
+    await upsertTagPage(slug, t, kindsByTag[t], descriptionsByTag[t]);
+  }
+
+  // Final doc-page rewrite so it carries the complete tag set + summaries.
+  await writeDocPage(slug, filename, kind, tags, summaryByPage);
+
   const pageCount =
     payload.kind === 'pdf'
       ? payload.pages.length
@@ -250,8 +410,6 @@ export async function ingestUpload(
     tags,
     payload,
   };
-
-  await pushToGbrain(doc, onProgress);
 
   const c = await loadCache();
   c.set(slug, doc);
