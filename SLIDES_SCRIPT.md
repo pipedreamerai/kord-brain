@@ -1,6 +1,8 @@
 # kord-brain × gbrain — demo script
 
-Open `/slides`. Use **→ / space** to advance, **← / h** to go back, **1–8** to jump.
+Open `/slides`. Use **→ / space** to advance, **← / h** to go back, **1–8** to jump, **r** to replay the current voiceover, **m** to mute, **s** to toggle the on-screen script (teleprompter). Voiceover plays automatically when a slide opens; if the browser blocks audio on slide 1, click **▶ start audio** in the footer once and subsequent slides will play on their own.
+
+Regenerate audio with `./scripts/gen-voiceover.sh` (override voice via `VOICE=Daniel ./scripts/gen-voiceover.sh`). The narration text lives in that script as heredocs — edit there, re-run, done.
 
 ---
 

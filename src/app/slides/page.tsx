@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
-type Slide = { kicker: string; node: ReactNode };
+type Slide = { kicker: string; node: ReactNode; script: string };
 
 // ──────────────────────────────────────────────────────────────────────────
 // Atoms
@@ -80,6 +80,8 @@ const slides: Slide[] = [
   // 1 — COVER
   {
     kicker: 'demo · 2026-05-16',
+    script:
+      "kord-brain. You drop engineering documents in, gbrain builds a knowledge graph from them, and the chat agent answers by querying that graph. Same gbrain on both sides of the arrow.",
     node: (
       <div className="flex flex-col items-center gap-16">
         <div className="text-center">
@@ -101,6 +103,8 @@ const slides: Slide[] = [
   // 2 — THE CLAIM
   {
     kicker: 'the claim',
+    script:
+      "What's different here. In a typical RAG setup, the LLM has its own retrieval stack — a vector index, sometimes a graph in TypeScript, sometimes a curated tag whitelist. Here, none of that exists. The only retrieval layer is gbrain.",
     node: (
       <div className="flex flex-col items-center gap-14">
         <div className="grid grid-cols-2 gap-10 items-center">
@@ -139,6 +143,8 @@ const slides: Slide[] = [
   // 3 — THREE LOOPS
   {
     kicker: 'three loops',
+    script:
+      'Three loops, all going through gbrain. Write: uploads become gbrain pages and "mentions" links. Read: the graph view is the server walking gbrain at depth one. Retrieve: the chat agent\'s only tools are gbrain commands. Same store, three views.',
     node: (
       <div className="flex flex-col gap-7 w-full">
         {[
@@ -178,6 +184,8 @@ const slides: Slide[] = [
   // 4 — WRITE
   {
     kicker: 'loop 1 — write',
+    script:
+      "When you drop a file, we parse it, run a generic engineering-tag regex over the text — no whitelist. Then we putPage for the document, and for each tag we re-read the existing tag page, append a mention, write it back, and link the doc to the tag. Tag pages are rebuilt from current state every time.",
     node: (
       <div className="flex flex-col items-center gap-10">
         <div className="flex items-center gap-3">
@@ -214,6 +222,8 @@ const slides: Slide[] = [
   // 5 — READ
   {
     kicker: 'loop 2 — read',
+    script:
+      "After every upload the client re-fetches /api/graph. The server seeds with every doc slug, every tag slug, and whatever gbrain.list returns. For each seed it walks the graph at depth one, dedupes nodes and edges, and ships JSON. The SVG renders docs on the inner ring and tags on the outer ring.",
     node: (
       <div className="flex flex-col items-center gap-9">
         <div className="flex items-center gap-3">
@@ -280,6 +290,8 @@ const slides: Slide[] = [
   // 6 — RETRIEVE (chat agent)
   {
     kicker: 'loop 3 — retrieve',
+    script:
+      "Chat. useChat hits /api/chat, which runs the qaAgent — Opus 4.7 through the Vercel AI Gateway. The agent has exactly five tools, each one a thin wrapper around a gbrain command. The system prompt forces it to cite the slugs it actually pulled. You'll see the tool calls stream into the chat UI live.",
     node: (
       <div className="flex flex-col items-center gap-7">
         <div className="flex items-center gap-3">
@@ -324,6 +336,8 @@ const slides: Slide[] = [
   // 7 — WHAT WE DON'T HAVE
   {
     kicker: 'what is NOT in this repo',
+    script:
+      "Worth saying out loud what we did NOT build. No tag list in TypeScript. No vector index. No graph code on our side. No ontology. No database schema. The LLM has no retrieval layer of its own. All of it lives in gbrain's PGLite store.",
     node: (
       <div className="flex flex-col items-center gap-7">
         <div className="grid grid-cols-2 gap-x-14 gap-y-5">
@@ -347,6 +361,8 @@ const slides: Slide[] = [
   // 8 — CLOSING
   {
     kicker: 'the punchline',
+    script:
+      "So the whole demo collapses to seven verbs: putPage, link, graph, search, getPage, backlinks, list. Upload uses the first two. The graph view uses one. The chat agent uses the rest. Nothing the LLM cites was retrieved any other way.",
     node: (
       <div className="flex flex-col items-center gap-10">
         <Box tone="gbrain" size="lg">
@@ -381,6 +397,39 @@ const slides: Slide[] = [
 
 export default function SlidesPage() {
   const [i, setI] = useState(0);
+  const [muted, setMuted] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [showScript, setShowScript] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const audioSrc = `/slides-audio/${String(i + 1).padStart(2, '0')}.m4a`;
+
+  // Slide change → swap src and try to play.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    a.src = audioSrc;
+    a.currentTime = 0;
+    setProgress(0);
+    if (muted) return;
+    const p = a.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(() => setBlocked(true));
+    }
+  }, [audioSrc, muted]);
+
+  // Mute toggle.
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.muted = muted;
+  }, [muted]);
+
+  const replay = () => {
+    const a = audioRef.current;
+    if (!a) return;
+    a.currentTime = 0;
+    a.play().then(() => setBlocked(false)).catch(() => setBlocked(true));
+  };
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -392,6 +441,9 @@ export default function SlidesPage() {
         setI((x) => Math.max(0, x - 1));
       } else if (e.key === 'Home') setI(0);
       else if (e.key === 'End') setI(slides.length - 1);
+      else if (e.key === 'm' || e.key === 'M') setMuted((x) => !x);
+      else if (e.key === 'r' || e.key === 'R') replay();
+      else if (e.key === 's' || e.key === 'S') setShowScript((x) => !x);
       else if (/^[1-9]$/.test(e.key)) {
         const n = parseInt(e.key, 10) - 1;
         if (n < slides.length) setI(n);
@@ -405,6 +457,17 @@ export default function SlidesPage() {
 
   return (
     <main className="fixed inset-0 bg-white text-zinc-900 flex flex-col">
+      <audio
+        ref={audioRef}
+        preload="auto"
+        onTimeUpdate={(e) => {
+          const a = e.currentTarget;
+          if (a.duration > 0) setProgress(a.currentTime / a.duration);
+        }}
+        onEnded={() => setProgress(1)}
+        onPlay={() => setBlocked(false)}
+      />
+
       <header className="px-10 pt-6 flex items-center justify-between text-[11px] font-mono uppercase tracking-widest text-zinc-400">
         <span>kord-brain × gbrain</span>
         <span>{slide.kicker}</span>
@@ -417,29 +480,82 @@ export default function SlidesPage() {
         <div className="w-full max-w-5xl flex items-center justify-center">{slide.node}</div>
       </section>
 
-      <footer className="px-10 pb-6 flex items-center justify-between text-[11px] font-mono text-zinc-400">
+      {/* Per-slide script panel (teleprompter) */}
+      {showScript && (
+        <div className="px-16 pb-4 border-t border-zinc-200 bg-zinc-50/80 backdrop-blur">
+          <div className="max-w-5xl mx-auto pt-4">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-400 mb-2">
+              script · slide {String(i + 1).padStart(2, '0')}
+            </div>
+            <p className="text-zinc-800 text-lg leading-relaxed">{slide.script}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Per-slide audio progress (full width, very thin) */}
+      <div className="h-0.5 bg-zinc-100">
+        <div
+          className="h-full bg-zinc-900 transition-[width] duration-100 ease-linear"
+          style={{ width: `${progress * 100}%` }}
+        />
+      </div>
+
+      <footer className="px-10 pb-6 pt-4 flex items-center justify-between text-[11px] font-mono text-zinc-400">
         <button
           onClick={() => setI((x) => Math.max(0, x - 1))}
-          className="hover:text-zinc-700 transition"
+          className="hover:text-zinc-700 transition disabled:opacity-30"
           disabled={i === 0}
         >
           ← prev
         </button>
-        <div className="flex gap-1.5">
-          {slides.map((_, idx) => (
+
+        <div className="flex items-center gap-5">
+          <button
+            onClick={replay}
+            className="hover:text-zinc-700 transition"
+            title="replay (r)"
+          >
+            ↻ replay
+          </button>
+          <button
+            onClick={() => setMuted((x) => !x)}
+            className={`hover:text-zinc-700 transition ${muted ? 'text-amber-700' : ''}`}
+            title="mute (m)"
+          >
+            {muted ? '○ muted' : '● sound'}
+          </button>
+          <button
+            onClick={() => setShowScript((x) => !x)}
+            className={`hover:text-zinc-700 transition ${showScript ? 'text-amber-700' : ''}`}
+            title="script (s)"
+          >
+            {showScript ? '▼ script' : '▲ script'}
+          </button>
+          {blocked && !muted && (
             <button
-              key={idx}
-              onClick={() => setI(idx)}
-              className={`h-1.5 rounded-full transition-all ${
-                idx === i ? 'w-6 bg-zinc-900' : 'w-1.5 bg-zinc-300 hover:bg-zinc-500'
-              }`}
-              aria-label={`slide ${idx + 1}`}
-            />
-          ))}
+              onClick={replay}
+              className="px-2 py-0.5 border border-amber-500 text-amber-700 rounded hover:bg-amber-50 transition"
+            >
+              ▶ start audio
+            </button>
+          )}
+          <div className="flex gap-1.5">
+            {slides.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => setI(idx)}
+                className={`h-1.5 rounded-full transition-all ${
+                  idx === i ? 'w-6 bg-zinc-900' : 'w-1.5 bg-zinc-300 hover:bg-zinc-500'
+                }`}
+                aria-label={`slide ${idx + 1}`}
+              />
+            ))}
+          </div>
         </div>
+
         <button
           onClick={() => setI((x) => Math.min(slides.length - 1, x + 1))}
-          className="hover:text-zinc-700 transition"
+          className="hover:text-zinc-700 transition disabled:opacity-30"
           disabled={i === slides.length - 1}
         >
           next →
