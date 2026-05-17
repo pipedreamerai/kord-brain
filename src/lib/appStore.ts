@@ -3,9 +3,15 @@ import type { BrainNode, BrainEdge } from '@/components/FullGbrainGraph';
 
 export type UploadKind = 'pdf' | 'docx' | 'xlsx';
 
+export type PdfTagLocation = {
+  page: number;
+  bbox: [number, number, number, number];
+};
+
 export type UploadPdfPayload = {
   kind: 'pdf';
   pages: { number: number; width: number; height: number }[];
+  tagLocations: Record<string, PdfTagLocation[]>;
 };
 export type UploadDocxPayload = {
   kind: 'docx';

@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile, readdir, stat, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { loadPdf, type PdfPageInfo } from './ingestion/pdf';
+import { loadPdf, type PdfPageInfo, type PdfTagLocations } from './ingestion/pdf';
 import { loadDocx } from './ingestion/docx';
 import { loadXlsx, type XlsxSheet, type XlsxTagRow } from './ingestion/xlsx';
 import * as gbrain from './gbrain';
@@ -11,6 +11,7 @@ export type UploadKind = 'pdf' | 'docx' | 'xlsx';
 export type UploadPdfPayload = {
   kind: 'pdf';
   pages: PdfPageInfo[];
+  tagLocations: PdfTagLocations;
 };
 export type UploadDocxPayload = {
   kind: 'docx';
@@ -105,7 +106,10 @@ async function parseFile(
 ): Promise<{ payload: UploadPayload; tags: string[] }> {
   if (kind === 'pdf') {
     const info = await loadPdf(buf, { filename });
-    return { payload: { kind: 'pdf', pages: info.pages }, tags: info.tags };
+    return {
+      payload: { kind: 'pdf', pages: info.pages, tagLocations: info.tagLocations },
+      tags: info.tags,
+    };
   }
   if (kind === 'docx') {
     const info = await loadDocx(buf);

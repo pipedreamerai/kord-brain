@@ -1,10 +1,18 @@
-import { tagRegex } from '../tagRegex';
+import { tagRegex, tagToSlug } from '../tagRegex';
 import { extractPdf, type ExtractedSpan } from './pdf-extractor-client';
 
 export type PdfPageInfo = { number: number; width: number; height: number };
 
 /** Where the tags came from — useful for logging and UI hints. */
 export type PdfTagSource = 'text-layer' | 'ocr' | 'none';
+
+export type PdfTagLocation = {
+  page: number;
+  bbox: [number, number, number, number];
+};
+
+/** tagSlug → every place that tag appears in this PDF. */
+export type PdfTagLocations = Record<string, PdfTagLocation[]>;
 
 export type PdfDocInfo = {
   pages: PdfPageInfo[];
@@ -14,8 +22,29 @@ export type PdfDocInfo = {
   pageText: Record<number, string>;
   /** Word-level spans per page — lets the UI later highlight tag bboxes. */
   pageSpans: Record<number, ExtractedSpan[]>;
+  /** For each tag slug, the pages + bboxes where it appears. */
+  tagLocations: PdfTagLocations;
   tagSource: PdfTagSource;
 };
+
+function extractTagLocations(
+  pageSpans: Record<number, ExtractedSpan[]>,
+): PdfTagLocations {
+  const out: PdfTagLocations = {};
+  const re = tagRegex();
+  for (const [pageStr, spans] of Object.entries(pageSpans)) {
+    const page = Number(pageStr);
+    for (const span of spans) {
+      re.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(span.text)) !== null) {
+        const slug = tagToSlug(m[0]);
+        (out[slug] ??= []).push({ page, bbox: span.bbox });
+      }
+    }
+  }
+  return out;
+}
 
 export async function loadPdf(
   buf: Buffer,
@@ -51,6 +80,8 @@ export async function loadPdf(
   const tagSource: PdfTagSource =
     tagSet.size === 0 ? 'none' : sources.has('ocr') ? 'ocr' : 'text-layer';
 
+  const tagLocations = extractTagLocations(pageSpans);
+
   console.log(
     `[pdf-extractor] ${opts.filename ?? '<pdf>'}: ${tagSet.size} tags across ${pages.length} pages ` +
       `(sidecar ${result.elapsedMs}ms, total ${Date.now() - t0}ms, source=${tagSource}, anyOcr=${result.anyOcr})`,
@@ -61,6 +92,7 @@ export async function loadPdf(
     tags: [...tagSet].sort(),
     pageText,
     pageSpans,
+    tagLocations,
     tagSource,
   };
 }
