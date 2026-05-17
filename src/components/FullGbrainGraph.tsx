@@ -138,6 +138,27 @@ export function FullGbrainGraph({ nodes, edges, selectedSlug, onSelectNode }: Pr
     fg.d3Force('link')?.distance?.(36);
   }, [data]);
 
+  // Zoom whenever the selected tag changes, regardless of the trigger source
+  // (graph click, chat citation, or file-row tag pill). Reads fx/fy/fz off the
+  // GNode since the fibonacci layout pins each node to a fixed shell position.
+  useEffect(() => {
+    if (!selectedSlug) return;
+    const fg = fgRef.current;
+    if (!fg) return;
+    const node = data.nodes.find((n) => n.id === selectedSlug);
+    if (!node) return;
+    const x = node.fx ?? 0;
+    const y = node.fy ?? 0;
+    const z = node.fz ?? 0;
+    const r = Math.hypot(x, y, z) || 1;
+    const distance = 80;
+    fg.cameraPosition(
+      { x: x * (1 + distance / r), y: y * (1 + distance / r), z: z * (1 + distance / r) },
+      { x, y, z },
+      900,
+    );
+  }, [selectedSlug, data]);
+
   return (
     <div
       ref={wrapRef}
@@ -209,6 +230,9 @@ export function FullGbrainGraph({ nodes, edges, selectedSlug, onSelectNode }: Pr
           onNodeClick={(n: unknown) => {
             const node = n as GNode;
             onSelectNode?.(node.slug, node.kind);
+            // Tag clicks update selectedSlug and zoom via the effect above.
+            // Doc clicks don't, so handle the camera move inline.
+            if (node.kind === 'tag') return;
             const fg = fgRef.current;
             if (!fg) return;
             const distance = 80;

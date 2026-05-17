@@ -155,30 +155,39 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   loadInitialState: async () => {
     if (get().initialLoaded) return;
-    set({ initialLoaded: true });
-    console.log('[kord] loadInitialState: starting');
-    try {
-      const [uploadsRes, graphRes] = await Promise.all([
-        fetch('/api/uploads'),
-        fetch('/api/graph'),
-      ]);
-      console.log('[kord] loadInitialState: status', uploadsRes.status, graphRes.status);
-      if (!uploadsRes.ok || !graphRes.ok) return;
-      const uploadsData = (await uploadsRes.json()) as { docs: UploadedDoc[] };
-      const graphData = (await graphRes.json()) as GraphSnapshot;
-      console.log('[kord] loadInitialState: docs', uploadsData.docs?.length, 'nodes', graphData.nodes?.length);
-      // User may have uploaded / reset / deleted while fetches were in flight.
-      // Their action wins — only sync if state is still pristine.
-      const s = get();
-      if (s.docs.length > 0 || s.uploading || s.resetting) {
-        console.log('[kord] loadInitialState: bailing', { docs: s.docs.length, uploading: s.uploading, resetting: s.resetting });
-        return;
+    set({ initialLoaded: true, graphLoading: true });
+
+    // Fire docs and graph independently so the file list paints fast while the
+    // slower gbrain graph walk fills in behind it. Don't clobber concurrent
+    // user actions: if docs are already populated (upload completed) or a reset
+    // is in flight, drop the stale result.
+    void (async () => {
+      try {
+        const res = await fetch('/api/uploads');
+        if (!res.ok) return;
+        const data = (await res.json()) as { docs: UploadedDoc[] };
+        const s = get();
+        if (s.docs.length > 0 || s.resetting) return;
+        set({ docs: data.docs ?? [] });
+      } catch {
+        // Best-effort — empty UI is the fallback.
       }
-      set({ docs: uploadsData.docs ?? [], graph: graphData });
-      console.log('[kord] loadInitialState: applied');
-    } catch (err) {
-      console.log('[kord] loadInitialState: error', err);
-    }
+    })();
+
+    void (async () => {
+      try {
+        const res = await fetch('/api/graph');
+        if (!res.ok) return;
+        const data = (await res.json()) as GraphSnapshot;
+        const s = get();
+        if (s.graph.nodes.length > 0 || s.resetting) return;
+        set({ graph: data });
+      } catch {
+        // Best-effort — empty UI is the fallback.
+      } finally {
+        set({ graphLoading: false });
+      }
+    })();
   },
 
   refreshGraph: async () => {
