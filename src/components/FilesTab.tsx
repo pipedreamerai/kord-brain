@@ -180,7 +180,7 @@ export function FilesTab() {
             )}
             <div className="flex-1 min-h-0 overflow-auto">
               {active ? (
-                <DocViewer doc={active} citedTags={citedTags} scrollTarget={scrollTarget} />
+                <DocViewer doc={active} selectedTag={selectedTag} scrollTarget={scrollTarget} />
               ) : (
                 <div className="flex items-center justify-center h-full text-[12px] text-zinc-500">
                   Pick a file to see citations highlighted.

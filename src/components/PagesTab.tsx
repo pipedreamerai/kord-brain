@@ -95,21 +95,6 @@ export function PagesTab() {
 
   return (
     <div className="h-full bg-zinc-950 text-zinc-100 flex flex-col">
-      <div className="shrink-0 px-3 py-2 border-b border-zinc-800">
-        <div className="flex items-center gap-2">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">gbrain pages</div>
-          {graphLoading && (
-            <span className="ml-auto px-1.5 py-0.5 rounded-full bg-zinc-900 border border-zinc-700 flex items-center gap-1 text-[9px] font-mono uppercase tracking-wide text-emerald-300">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              refreshing
-            </span>
-          )}
-        </div>
-        <div className="text-[11px] font-mono text-zinc-400">
-          {items.length} page{items.length === 1 ? '' : 's'}
-        </div>
-      </div>
-
       {items.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-center px-6">
           <p className="text-[12px] text-zinc-600 font-mono">no gbrain pages yet</p>
