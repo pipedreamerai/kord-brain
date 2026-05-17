@@ -1,12 +1,20 @@
 """
 PDF extraction sidecar for kord-brain.
 
-Returns per-page text + word-level bboxes + vector-path counts in one call.
-Falls back to Tesseract OCR (via PyMuPDF's built-in textpage_ocr) when a page
-has no text layer — that's the common case for raster-only P&IDs.
+Renders each page to a base64 JPEG, returns the embedded text layer, and
+returns word-level spans (bboxes) from the text layer when present.
+
+The Node side (src/lib/ingestion/pdf.ts) decides per page whether to read the
+text layer or to send the image to Claude vision via AI Gateway
+(src/lib/ingestion/vision-extractor.ts). Spans drive the bbox-overlay UI on
+text-layer PDFs (no spans for raster pages — Claude doesn't return bboxes).
+
+This replaced the prior Tesseract OCR pipeline, which couldn't read engineering
+tags inside instrument balloons on low-DPI raster P&IDs.
 """
 from __future__ import annotations
 
+import base64
 import os
 import time
 from typing import Any
@@ -15,11 +23,11 @@ import fitz  # PyMuPDF
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
-OCR_LANG = os.environ.get("PDF_OCR_LANG", "eng")
-OCR_DPI = int(os.environ.get("PDF_OCR_DPI", "300"))
+RENDER_LONG_EDGE_PX = int(os.environ.get("PDF_RENDER_LONG_EDGE_PX", "4800"))
+RENDER_JPEG_QUALITY = int(os.environ.get("PDF_RENDER_JPEG_QUALITY", "82"))
 MAX_PDF_BYTES = int(os.environ.get("PDF_MAX_BYTES", str(100 * 1024 * 1024)))
 
-app = FastAPI(title="kord-brain pdf-extractor", version="0.1.0")
+app = FastAPI(title="kord-brain pdf-extractor", version="0.3.0")
 
 
 class Span(BaseModel):
@@ -29,58 +37,75 @@ class Span(BaseModel):
 
 class PageOut(BaseModel):
     number: int
-    width: float
+    width: float          # PDF user-space points
     height: float
-    text: str
-    spans: list[Span]
+    image_b64: str        # JPEG, long-edge RENDER_LONG_EDGE_PX, base64
+    image_mime: str
+    text_layer: str       # may be empty for raster pages
+    spans: list[Span]     # word-level bboxes from the text layer; empty for raster
     vector_paths: int
-    source: str  # "text" | "ocr" | "empty"
 
 
 class ExtractOut(BaseModel):
     page_count: int
     pages: list[PageOut]
     elapsed_ms: int
-    any_ocr: bool
 
 
 @app.get("/healthz")
 def healthz() -> dict[str, Any]:
-    return {"ok": True, "pymupdf": fitz.__version__}
+    return {
+        "ok": True,
+        "pymupdf": fitz.__version__,
+        "render_long_edge_px": RENDER_LONG_EDGE_PX,
+        "render_jpeg_quality": RENDER_JPEG_QUALITY,
+    }
 
 
-def _extract_page(page: fitz.Page) -> PageOut:
+def _render_page(page: fitz.Page) -> PageOut:
     rect = page.rect
-    words = page.get_text("words")
-    source = "text"
-    if not words:
-        try:
-            tp = page.get_textpage_ocr(dpi=OCR_DPI, language=OCR_LANG, full=True)
-            words = page.get_text("words", textpage=tp)
-            source = "ocr" if words else "empty"
-        except Exception:
-            source = "empty"
-            words = []
+    long_edge_pt = max(rect.width, rect.height)
+    # Scale so the longest edge in pixels lands near RENDER_LONG_EDGE_PX.
+    scale = RENDER_LONG_EDGE_PX / long_edge_pt if long_edge_pt > 0 else 1.0
+    matrix = fitz.Matrix(scale, scale)
+    pix = page.get_pixmap(matrix=matrix, alpha=False)
+    jpeg = pix.tobytes("jpeg", jpg_quality=RENDER_JPEG_QUALITY)
 
-    spans = [
-        Span(text=w[4], bbox=[float(w[0]), float(w[1]), float(w[2]), float(w[3])])
-        for w in words
-        if isinstance(w[4], str) and w[4].strip()
-    ]
-    text = " ".join(s.text for s in spans)
     try:
         vector_paths = len(page.get_drawings())
     except Exception:
         vector_paths = 0
 
+    text_layer = page.get_text("text") or ""
+
+    # Word-level spans from the text layer. Free — no OCR. Empty list when
+    # the page is raster (no text layer). The Node side uses these to build
+    # tag bbox overlays in the PDF viewer.
+    spans: list[Span] = []
+    try:
+        words = page.get_text("words")
+        for w in words:
+            txt = w[4] if isinstance(w[4], str) else ""
+            if not txt.strip():
+                continue
+            spans.append(
+                Span(
+                    text=txt,
+                    bbox=[float(w[0]), float(w[1]), float(w[2]), float(w[3])],
+                )
+            )
+    except Exception:
+        spans = []
+
     return PageOut(
         number=page.number + 1,
         width=float(rect.width),
         height=float(rect.height),
-        text=text,
+        image_b64=base64.b64encode(jpeg).decode("ascii"),
+        image_mime="image/jpeg",
+        text_layer=text_layer,
         spans=spans,
         vector_paths=vector_paths,
-        source=source,
     )
 
 
@@ -99,7 +124,7 @@ async def extract(file: UploadFile = File(...)) -> ExtractOut:
         raise HTTPException(400, f"could not parse pdf: {e}")
 
     try:
-        pages = [_extract_page(p) for p in doc]
+        pages = [_render_page(p) for p in doc]
     finally:
         doc.close()
 
@@ -107,5 +132,4 @@ async def extract(file: UploadFile = File(...)) -> ExtractOut:
         page_count=len(pages),
         pages=pages,
         elapsed_ms=int((time.perf_counter() - t0) * 1000),
-        any_ocr=any(p.source == "ocr" for p in pages),
     )
