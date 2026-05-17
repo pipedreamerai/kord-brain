@@ -7,6 +7,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '@/lib/appStore';
 import { tagToSlug } from '@/lib/tagRegex';
 
+// Matches engineering-tag-shaped tokens in EITHER original form ("P-101", "AE/TE-301")
+// or slug form ("p-101", "ae-te-301"). Cast to slug via tagToSlug() before lookup.
+const INLINE_TAG_RE = /\b[A-Za-z][A-Za-z0-9]*(?:[/-][A-Za-z0-9]+)*-[A-Za-z0-9]+\b/g;
+
 type AnyPart = UIMessage['parts'][number];
 
 const SLUG_RE = /^[a-z0-9][a-z0-9_/-]*$/;
@@ -220,67 +224,69 @@ function PartView({ part }: { part: AnyPart }) {
   return null;
 }
 
-// Matches an optional trailing "Cites: ..." line. Group 1 = body, group 2 = label, group 3 = slugs.
-const CITES_RE = /^([\s\S]*?)(\n\s*Cite[sd]?:\s*)(.+?)\s*$/i;
+type Segment =
+  | { type: 'text'; text: string }
+  | { type: 'tag'; slug: string; display: string; docCount: number };
 
 function TextWithCitations({ text }: { text: string }) {
   const focusCitation = useAppStore((s) => s.focusCitation);
   const docs = useAppStore((s) => s.docs);
 
-  const m = text.match(CITES_RE);
-  if (!m) {
-    return (
-      <div className="text-[12px] text-zinc-100 whitespace-pre-wrap leading-relaxed">
-        {text}
-      </div>
-    );
-  }
-  const [, body, label, citesPart] = m;
-  const slugs = citesPart
-    .split(/[,\s\[\]()]+/)
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
+  // slug → count of uploaded docs containing it.
+  const docSlugCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of docs) {
+      const seen = new Set<string>();
+      for (const t of d.tags) {
+        const s = tagToSlug(t);
+        if (seen.has(s)) continue;
+        seen.add(s);
+        m.set(s, (m.get(s) ?? 0) + 1);
+      }
+    }
+    return m;
+  }, [docs]);
 
-  // Tag slug → number of docs that contain it. 0 means we can't navigate.
-  const docsBySlug = new Map<string, number>();
-  for (const s of slugs) {
-    docsBySlug.set(
-      s,
-      docs.filter((d) => d.tags.some((t) => tagToSlug(t) === s)).length,
-    );
-  }
+  // Walk the message text; wrap any tag-shaped token whose slug is in an uploaded doc.
+  // Tokens that don't resolve stay as plain text so we don't visually flag noise.
+  const segments = useMemo<Segment[]>(() => {
+    const out: Segment[] = [];
+    const re = new RegExp(INLINE_TAG_RE.source, 'g');
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const slug = tagToSlug(m[0]);
+      const count = docSlugCounts.get(slug) ?? 0;
+      if (count === 0) continue; // leave as plain text in the next chunk
+      if (m.index > last) out.push({ type: 'text', text: text.slice(last, m.index) });
+      out.push({ type: 'tag', slug, display: m[0], docCount: count });
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) out.push({ type: 'text', text: text.slice(last) });
+    return out;
+  }, [text, docSlugCounts]);
 
   return (
     <div className="text-[12px] text-zinc-100 whitespace-pre-wrap leading-relaxed">
-      {body}
-      <span className="text-zinc-500">{label}</span>
-      <span className="inline-flex flex-wrap gap-1 align-baseline">
-        {slugs.map((slug, i) => {
-          const count = docsBySlug.get(slug) ?? 0;
-          if (count === 0) {
-            return (
-              <span
-                key={i}
-                title="No uploaded doc contains this tag"
-                className="text-[11px] font-mono text-zinc-500 line-through"
-              >
-                {slug}
-              </span>
-            );
-          }
-          return (
-            <button
-              key={i}
-              type="button"
-              onClick={() => focusCitation(slug)}
-              title={count > 1 ? `Open first of ${count} docs containing ${slug}` : `Open doc containing ${slug}`}
-              className="text-[11px] font-mono text-amber-200 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-900/60 rounded px-1.5 py-0.5 transition-colors cursor-pointer"
-            >
-              {slug}
-            </button>
-          );
-        })}
-      </span>
+      {segments.map((seg, i) =>
+        seg.type === 'text' ? (
+          <span key={i}>{seg.text}</span>
+        ) : (
+          <button
+            key={i}
+            type="button"
+            onClick={() => focusCitation(seg.slug)}
+            title={
+              seg.docCount > 1
+                ? `Open first of ${seg.docCount} docs containing ${seg.display}`
+                : `Open doc containing ${seg.display}`
+            }
+            className="text-amber-200 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-900/60 rounded px-1 transition-colors cursor-pointer font-mono"
+          >
+            {seg.display}
+          </button>
+        ),
+      )}
     </div>
   );
 }
@@ -352,12 +358,14 @@ function formatArgs(input: unknown): string {
 }
 
 function extractCitations(message: UIMessage): Set<string> {
+  // "Universe" of slugs the agent actually pulled via tools — guards against
+  // the model inventing tag-shaped strings that don't exist in the brain.
   const universe = new Set<string>();
-  let finalText = '';
+  const textChunks: string[] = [];
 
   for (const part of message.parts) {
     if (part.type === 'text') {
-      finalText = (part as { text: string }).text;
+      textChunks.push((part as { text: string }).text);
     } else if (
       typeof (part as { type?: string }).type === 'string' &&
       ((part as { type: string }).type.startsWith('tool-') ||
@@ -371,14 +379,15 @@ function extractCitations(message: UIMessage): Set<string> {
     }
   }
 
-  const match = finalText.match(/(?:^|\n)\s*Cite[sd]?:\s*(.+?)(?:\n|$)/i);
-  if (!match) return new Set();
-
-  const raw = match[1].split(/[,\s\[\]()]+/).filter(Boolean);
   const cited = new Set<string>();
-  for (const r of raw) {
-    const s = r.toLowerCase();
-    if (universe.has(s)) cited.add(s);
+  const re = new RegExp(INLINE_TAG_RE.source, 'g');
+  for (const text of textChunks) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const slug = m[0].toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      if (universe.has(slug)) cited.add(slug);
+    }
   }
   return cited;
 }
