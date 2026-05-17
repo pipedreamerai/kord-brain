@@ -1,6 +1,8 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { homedir } from 'node:os';
+import { readFile, rm } from 'node:fs/promises';
+import path from 'node:path';
 
 const execFileP = promisify(execFile);
 
@@ -138,6 +140,33 @@ export async function stats(): Promise<GbrainStats> {
   const pages = parseInt(out.match(/pages[:\s]+(\d+)/i)?.[1] ?? '0', 10);
   const links = parseInt(out.match(/links[:\s]+(\d+)/i)?.[1] ?? '0', 10);
   return { pages, links };
+}
+
+/**
+ * Hard-wipe the local PGLite database and reinitialize. `gbrain delete` is a
+ * soft-delete with a 72h purge window, so a list+delete loop leaks orphan
+ * pages/links across sessions. For a hackathon-style reset we want stats
+ * back to zero, which requires nuking the DB directory itself.
+ */
+export async function wipeAndInit(): Promise<void> {
+  const configPath = path.join(homedir(), '.gbrain', 'config.json');
+  let dbPath = path.join(homedir(), '.gbrain', 'brain.pglite');
+  let engine: string | undefined;
+  try {
+    const cfg = JSON.parse(await readFile(configPath, 'utf8')) as {
+      engine?: string;
+      database_path?: string;
+    };
+    engine = cfg.engine;
+    if (cfg.database_path) dbPath = cfg.database_path;
+  } catch {
+    // No config — assume default PGLite path.
+  }
+  if (engine && engine !== 'pglite') {
+    throw new Error(`Refusing to wipe non-PGLite gbrain engine: ${engine}`);
+  }
+  await rm(dbPath, { recursive: true, force: true });
+  await runGbrain(['init']);
 }
 
 export async function list(limit = 200): Promise<string[]> {

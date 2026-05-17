@@ -284,27 +284,10 @@ export async function findSlugByFilename(filename: string): Promise<string | nul
 }
 
 export async function nukeAll(): Promise<{ pagesDeleted: number; filesDeleted: number }> {
-  // Ask gbrain what it has, not what our local meta thinks we uploaded — prior
-  // dev sessions can leave orphan pages that .meta.json never knew about, and
-  // those would otherwise survive reset and pollute /api/graph.
-  const slugs = new Set(await gbrain.list(5000));
-
-  // Belt-and-suspenders: union in anything meta knows about, in case `list`
-  // truncated or a page slipped through its slug-shape filter.
-  const meta = await loadMeta();
-  for (const d of meta.docs) {
-    slugs.add(d.slug);
-    for (const t of d.tags) slugs.add(tagToSlug(t));
-  }
-
-  let pagesDeleted = 0;
-  const slugArr = [...slugs];
-  const CONCURRENCY = 8;
-  for (let i = 0; i < slugArr.length; i += CONCURRENCY) {
-    const batch = slugArr.slice(i, i + CONCURRENCY);
-    await Promise.all(batch.map((s) => gbrain.deletePage(s)));
-    pagesDeleted += batch.length;
-  }
+  // Hard-wipe gbrain's PGLite DB rather than looping `gbrain delete` — the CLI
+  // only soft-deletes, so orphan links/chunks would still pollute stats and
+  // the graph traversal in /api/graph.
+  await gbrain.wipeAndInit();
 
   let filesDeleted = 0;
   try {
@@ -319,7 +302,7 @@ export async function nukeAll(): Promise<{ pagesDeleted: number; filesDeleted: n
 
   cache = new Map();
   cacheLoaded = true;
-  return { pagesDeleted, filesDeleted };
+  return { pagesDeleted: 0, filesDeleted };
 }
 
 export async function scanUploadsDir(): Promise<string[]> {

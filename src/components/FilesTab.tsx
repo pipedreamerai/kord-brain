@@ -17,6 +17,7 @@ export function FilesTab() {
   const citedTags = useAppStore((s) => s.citedTags);
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<boolean>(false);
+  const [fullscreen, setFullscreen] = useState<boolean>(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -24,6 +25,15 @@ export function FilesTab() {
       if (window.localStorage.getItem(FILES_BAR_KEY) === '1') setCollapsed(true);
     } catch {}
   }, []);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setFullscreen(false);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fullscreen]);
 
   function toggleCollapsed() {
     setCollapsed((prev) => {
@@ -118,14 +128,55 @@ export function FilesTab() {
             )}
           </aside>
 
-          <main className="flex-1 min-w-0 bg-zinc-100 text-zinc-900 overflow-auto">
-            {active ? (
-              <DocViewer doc={active} citedTags={citedTags} />
-            ) : (
-              <div className="flex items-center justify-center h-full text-[12px] text-zinc-500">
-                Pick a file to see citations highlighted.
+          <main
+            className={
+              fullscreen
+                ? 'fixed inset-0 z-50 bg-zinc-100 text-zinc-900 flex flex-col'
+                : 'flex-1 min-w-0 bg-zinc-100 text-zinc-900 flex flex-col'
+            }
+          >
+            {active && (
+              <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-zinc-200/80 border-b border-zinc-300 text-zinc-700">
+                <span className="text-[11px] font-mono truncate">{active.displayName}</span>
+                <button
+                  onClick={() => setFullscreen((v) => !v)}
+                  aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen viewer'}
+                  title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
+                  className="ml-auto text-[11px] font-mono text-zinc-600 hover:text-zinc-900 flex items-center gap-1 px-2 py-0.5 rounded hover:bg-zinc-300/60"
+                >
+                  {fullscreen ? (
+                    <>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M8 3v3a2 2 0 0 1-2 2H3" />
+                        <path d="M21 8h-3a2 2 0 0 1-2-2V3" />
+                        <path d="M3 16h3a2 2 0 0 1 2 2v3" />
+                        <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
+                      </svg>
+                      Exit
+                    </>
+                  ) : (
+                    <>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 8V5a2 2 0 0 1 2-2h3" />
+                        <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+                        <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+                        <path d="M21 16v3a2 2 0 0 1-2 2h-3" />
+                      </svg>
+                      Fullscreen
+                    </>
+                  )}
+                </button>
               </div>
             )}
+            <div className="flex-1 min-h-0 overflow-auto">
+              {active ? (
+                <DocViewer doc={active} citedTags={citedTags} />
+              ) : (
+                <div className="flex items-center justify-center h-full text-[12px] text-zinc-500">
+                  Pick a file to see citations highlighted.
+                </div>
+              )}
+            </div>
           </main>
         </>
       )}
