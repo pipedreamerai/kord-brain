@@ -310,7 +310,6 @@ function FileRow({
           {doc.tags.slice(0, 8).map((t) => {
             const slug = slugify(t);
             const isSelected = selectedTag === slug;
-            const isCited = citedTags.has(slug);
             return (
               <button
                 key={t}
@@ -322,9 +321,7 @@ function FileRow({
                 className={`text-[9px] rounded px-1 font-mono cursor-pointer transition-colors ${
                   isSelected
                     ? 'bg-amber-400 text-zinc-950 ring-1 ring-amber-300'
-                    : isCited
-                      ? 'bg-amber-900/60 text-amber-200 hover:bg-amber-800/70'
-                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
                 }`}
               >
                 {t}
@@ -342,14 +339,17 @@ function FileRow({
 
 function DocViewer({
   doc,
-  citedTags,
+  selectedTag,
   scrollTarget,
 }: {
   doc: UploadedDoc;
-  citedTags: Set<string>;
+  selectedTag: string | null;
   scrollTarget: { tag: string; nonce: number } | null;
 }) {
   const noop = () => {};
+  // Viewers were designed to highlight a set; we now feed a singleton so only
+  // the actively selected tag draws emphasis.
+  const highlighted = selectedTag ? new Set([selectedTag]) : EMPTY_TAG_SET;
   if (doc.payload.kind === 'pdf') {
     const tagBySlug = new Map(doc.tags.map((t) => [slugify(t), t]));
     const bboxes: PdfBboxEntry[] = [];
@@ -363,7 +363,7 @@ function DocViewer({
       <PdfViewer
         url={`/api/uploads/${encodeURIComponent(doc.filename)}`}
         bboxes={bboxes}
-        highlightedTags={citedTags}
+        highlightedTags={highlighted}
         onTagClick={noop}
         scrollTarget={scrollTarget}
       />
@@ -373,7 +373,7 @@ function DocViewer({
     return (
       <DocxViewer
         html={doc.payload.html}
-        highlightedTags={citedTags}
+        highlightedTags={highlighted}
         onTagClick={noop}
       />
     );
@@ -381,11 +381,13 @@ function DocViewer({
   return (
     <XlsxViewer
       sheets={doc.payload.sheets}
-      highlightedTags={citedTags}
+      highlightedTags={highlighted}
       onTagClick={noop}
     />
   );
 }
+
+const EMPTY_TAG_SET: Set<string> = new Set();
 
 function EmptyState({
   onUpload,
