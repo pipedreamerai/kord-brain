@@ -64,15 +64,6 @@ export function PagesTab() {
 
   return (
     <div className="h-full bg-zinc-950 text-zinc-100 flex flex-col">
-      <div className="shrink-0 px-3 py-2 border-b border-zinc-800 flex items-center justify-between">
-        <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">gbrain pages</div>
-          <div className="text-[11px] font-mono text-zinc-400">
-            {pages.length} page{pages.length === 1 ? '' : 's'} {loading ? '· loading' : ''}
-          </div>
-        </div>
-      </div>
-
       {pages.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-center px-6">
           <p className="text-[12px] text-zinc-600 font-mono">
@@ -89,9 +80,8 @@ export function PagesTab() {
                 <button
                   key={page.slug}
                   onClick={() => setSelectedSlug(page.slug)}
-                  className={`w-full text-left rounded border px-3 py-2 transition ${
-                    active ? 'border-zinc-400 bg-zinc-900' : 'border-zinc-800 bg-zinc-950 hover:bg-zinc-900/70'
-                  }`}
+                  className={`w-full text-left rounded border px-3 py-2 transition ${active ? 'border-zinc-400 bg-zinc-900' : 'border-zinc-800 bg-zinc-950 hover:bg-zinc-900/70'
+                    }`}
                 >
                   <div className="flex items-center gap-2">
                     <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-mono uppercase ${typeClass(page.type)}`}>
