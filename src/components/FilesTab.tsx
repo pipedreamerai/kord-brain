@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useAppStore, type UploadedDoc } from '@/lib/appStore';
-import { PdfViewer } from './PdfViewer';
+import { PdfViewer, type PdfBboxEntry } from './PdfViewer';
 import { DocxViewer } from './DocxViewer';
 import { XlsxViewer } from './XlsxViewer';
 
@@ -15,7 +15,9 @@ export function FilesTab() {
   const uploadFiles = useAppStore((s) => s.uploadFiles);
   const deleteDoc = useAppStore((s) => s.deleteDoc);
   const citedTags = useAppStore((s) => s.citedTags);
-  const [activeSlug, setActiveSlug] = useState<string | null>(null);
+  const activeSlug = useAppStore((s) => s.activeSlug);
+  const setActiveSlug = useAppStore((s) => s.setActiveSlug);
+  const scrollTarget = useAppStore((s) => s.scrollTarget);
   const [collapsed, setCollapsed] = useState<boolean>(false);
   const [fullscreen, setFullscreen] = useState<boolean>(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -170,7 +172,7 @@ export function FilesTab() {
             )}
             <div className="flex-1 min-h-0 overflow-auto">
               {active ? (
-                <DocViewer doc={active} citedTags={citedTags} />
+                <DocViewer doc={active} citedTags={citedTags} scrollTarget={scrollTarget} />
               ) : (
                 <div className="flex items-center justify-center h-full text-[12px] text-zinc-500">
                   Pick a file to see citations highlighted.
@@ -272,15 +274,32 @@ function FileRow({
   );
 }
 
-function DocViewer({ doc, citedTags }: { doc: UploadedDoc; citedTags: Set<string> }) {
+function DocViewer({
+  doc,
+  citedTags,
+  scrollTarget,
+}: {
+  doc: UploadedDoc;
+  citedTags: Set<string>;
+  scrollTarget: { tag: string; nonce: number } | null;
+}) {
   const noop = () => {};
   if (doc.payload.kind === 'pdf') {
+    const tagBySlug = new Map(doc.tags.map((t) => [slugify(t), t]));
+    const bboxes: PdfBboxEntry[] = [];
+    for (const [slug, locs] of Object.entries(doc.payload.tagLocations ?? {})) {
+      const displayTag = tagBySlug.get(slug) ?? slug;
+      for (const loc of locs) {
+        bboxes.push({ tag: displayTag, page: loc.page, bbox: loc.bbox });
+      }
+    }
     return (
       <PdfViewer
         url={`/api/uploads/${encodeURIComponent(doc.filename)}`}
-        bboxes={[]}
+        bboxes={bboxes}
         highlightedTags={citedTags}
         onTagClick={noop}
+        scrollTarget={scrollTarget}
       />
     );
   }

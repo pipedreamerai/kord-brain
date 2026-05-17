@@ -11,6 +11,9 @@ export type PdfBboxEntry = {
   note?: string;
 };
 
+/** Nonce changes on each request so repeat clicks on the same tag still scroll. */
+export type PdfScrollTarget = { tag: string; nonce: number };
+
 type PageDims = {
   cssWidth: number;
   cssHeight: number;
@@ -24,13 +27,16 @@ type Props = {
   bboxes: PdfBboxEntry[];
   highlightedTags: Set<string>;
   onTagClick: (tag: string) => void;
+  scrollTarget?: PdfScrollTarget | null;
 };
 
-export function PdfViewer({ url, bboxes, highlightedTags, onTagClick }: Props) {
+export function PdfViewer({ url, bboxes, highlightedTags, onTagClick, scrollTarget }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
+  const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [pageDims, setPageDims] = useState<PageDims[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [pulseKey, setPulseKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +109,45 @@ export function PdfViewer({ url, bboxes, highlightedTags, onTagClick }: Props) {
     };
   }, [url]);
 
+  // Scroll the parent scroll container to the requested tag's first bbox.
+  // Waits until pageDims is populated so the page heights are known.
+  useEffect(() => {
+    if (!scrollTarget) return;
+    if (pageDims.length === 0) return;
+    const slug = scrollTarget.tag;
+    const match = bboxes.find((b) => tagToSlug(b.tag) === slug);
+    if (!match) return;
+    const pageIdx = match.page - 1;
+    const dim = pageDims[pageIdx];
+    const pageEl = pageRefs.current[pageIdx];
+    if (!dim || !pageEl) return;
+
+    // PDF user-space origin is bottom-left; CSS is top-left. y1 is the top edge.
+    const [, , , y1] = match.bbox;
+    const bboxTopCss = dim.cssHeight - y1 * dim.scale;
+
+    let scrollParent: HTMLElement | null = pageEl.parentElement;
+    while (scrollParent && scrollParent !== document.body) {
+      const style = getComputedStyle(scrollParent);
+      if (/(auto|scroll)/.test(style.overflowY)) break;
+      scrollParent = scrollParent.parentElement;
+    }
+    if (!scrollParent) return;
+
+    const pageRect = pageEl.getBoundingClientRect();
+    const parentRect = scrollParent.getBoundingClientRect();
+    const pageOffsetTop = pageRect.top - parentRect.top + scrollParent.scrollTop;
+    scrollParent.scrollTo({
+      top: Math.max(0, pageOffsetTop + bboxTopCss - 80),
+      behavior: 'smooth',
+    });
+
+    const key = `${slug}#${scrollTarget.nonce}`;
+    setPulseKey(key);
+    const t = setTimeout(() => setPulseKey((k) => (k === key ? null : k)), 1600);
+    return () => clearTimeout(t);
+  }, [scrollTarget, pageDims, bboxes]);
+
   // We need to know numPages before rendering canvases, so we do a two-pass approach:
   // first fetch numPages, then render. Instead, we pre-allocate canvases up to a reasonable max
   // and let the effect populate only what's needed.
@@ -142,9 +187,11 @@ export function PdfViewer({ url, bboxes, highlightedTags, onTagClick }: Props) {
         const dim = pageDims[i];
         const pageNum = i + 1;
         const pageBboxes = bboxes.filter((b) => b.page === pageNum);
+        const targetSlug = scrollTarget?.tag ?? null;
         return (
           <div
             key={i}
+            ref={(el) => { pageRefs.current[i] = el; }}
             className="relative shadow-md border border-zinc-200 bg-white cursor-pointer"
             style={
               dim
@@ -164,15 +211,23 @@ export function PdfViewer({ url, bboxes, highlightedTags, onTagClick }: Props) {
                 const top = dim.cssHeight - y1 * dim.scale;
                 const width = (x1 - x0) * dim.scale;
                 const height = (y1 - y0) * dim.scale;
-                const highlighted = highlightedTags.has(tagToSlug(b.tag));
+                const slug = tagToSlug(b.tag);
+                const highlighted = highlightedTags.has(slug);
+                // First match for the active target — the bbox we scrolled to.
+                const isPulseTarget =
+                  pulseKey !== null &&
+                  targetSlug === slug &&
+                  bboxes.find((bb) => tagToSlug(bb.tag) === slug) === b;
                 return (
                   <div
                     key={`${b.tag}-${pageNum}-${bi}`}
                     title={`${b.tag}${b.note ? ' — ' + b.note : ''}`}
                     className={`absolute pointer-events-none transition-all duration-300 rounded-sm ${
-                      highlighted
-                        ? 'bg-amber-300/40 ring-2 ring-amber-500 shadow-lg shadow-amber-300/40'
-                        : 'ring-1 ring-blue-400/30'
+                      isPulseTarget
+                        ? 'bg-amber-400/60 ring-4 ring-amber-500 shadow-xl shadow-amber-400/60 animate-pulse'
+                        : highlighted
+                          ? 'bg-amber-300/40 ring-2 ring-amber-500 shadow-lg shadow-amber-300/40'
+                          : 'ring-1 ring-blue-400/30'
                     }`}
                     style={{ left, top, width, height }}
                   />

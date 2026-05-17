@@ -5,6 +5,7 @@ import { DefaultChatTransport } from 'ai';
 import type { UIMessage } from 'ai';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '@/lib/appStore';
+import { tagToSlug } from '@/lib/tagRegex';
 
 type AnyPart = UIMessage['parts'][number];
 
@@ -208,11 +209,7 @@ function MessageView({ message }: { message: UIMessage }) {
 
 function PartView({ part }: { part: AnyPart }) {
   if (part.type === 'text') {
-    return (
-      <div className="text-[12px] text-zinc-100 whitespace-pre-wrap leading-relaxed">
-        {(part as { text: string }).text}
-      </div>
-    );
+    return <TextWithCitations text={(part as { text: string }).text} />;
   }
   if (part.type === 'step-start') {
     return null;
@@ -221,6 +218,71 @@ function PartView({ part }: { part: AnyPart }) {
     return <ToolChip part={part as ToolPartLike} />;
   }
   return null;
+}
+
+// Matches an optional trailing "Cites: ..." line. Group 1 = body, group 2 = label, group 3 = slugs.
+const CITES_RE = /^([\s\S]*?)(\n\s*Cite[sd]?:\s*)(.+?)\s*$/i;
+
+function TextWithCitations({ text }: { text: string }) {
+  const focusCitation = useAppStore((s) => s.focusCitation);
+  const docs = useAppStore((s) => s.docs);
+
+  const m = text.match(CITES_RE);
+  if (!m) {
+    return (
+      <div className="text-[12px] text-zinc-100 whitespace-pre-wrap leading-relaxed">
+        {text}
+      </div>
+    );
+  }
+  const [, body, label, citesPart] = m;
+  const slugs = citesPart
+    .split(/[,\s\[\]()]+/)
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  // Tag slug → number of docs that contain it. 0 means we can't navigate.
+  const docsBySlug = new Map<string, number>();
+  for (const s of slugs) {
+    docsBySlug.set(
+      s,
+      docs.filter((d) => d.tags.some((t) => tagToSlug(t) === s)).length,
+    );
+  }
+
+  return (
+    <div className="text-[12px] text-zinc-100 whitespace-pre-wrap leading-relaxed">
+      {body}
+      <span className="text-zinc-500">{label}</span>
+      <span className="inline-flex flex-wrap gap-1 align-baseline">
+        {slugs.map((slug, i) => {
+          const count = docsBySlug.get(slug) ?? 0;
+          if (count === 0) {
+            return (
+              <span
+                key={i}
+                title="No uploaded doc contains this tag"
+                className="text-[11px] font-mono text-zinc-500 line-through"
+              >
+                {slug}
+              </span>
+            );
+          }
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => focusCitation(slug)}
+              title={count > 1 ? `Open first of ${count} docs containing ${slug}` : `Open doc containing ${slug}`}
+              className="text-[11px] font-mono text-amber-200 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-900/60 rounded px-1.5 py-0.5 transition-colors cursor-pointer"
+            >
+              {slug}
+            </button>
+          );
+        })}
+      </span>
+    </div>
+  );
 }
 
 type ToolPartLike = {

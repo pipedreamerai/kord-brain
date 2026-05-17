@@ -1,7 +1,10 @@
 import { create } from 'zustand';
 import type { BrainNode, BrainEdge } from '@/components/FullGbrainGraph';
+import { tagToSlug } from '@/lib/tagRegex';
 
 export type UploadKind = 'pdf' | 'docx' | 'xlsx';
+
+export type ScrollTarget = { tag: string; nonce: number };
 
 export type PdfTagLocation = {
   page: number;
@@ -52,6 +55,8 @@ type AppState = {
   citedTags: Set<string>;
   chatResetEpoch: number;
   initialLoaded: boolean;
+  activeSlug: string | null;
+  scrollTarget: ScrollTarget | null;
 
   loadInitialState: () => Promise<void>;
   uploadFiles: (files: File[]) => Promise<void>;
@@ -59,6 +64,9 @@ type AppState = {
   refreshGraph: () => Promise<void>;
   resetAll: () => Promise<void>;
   setCitedTags: (tags: Set<string>) => void;
+  setActiveSlug: (slug: string | null) => void;
+  /** Open the first doc that contains this tag and request a scroll to it. */
+  focusCitation: (tagSlug: string) => void;
 };
 
 const EMPTY_GRAPH: GraphSnapshot = { nodes: [], edges: [], stats: { pages: 0, links: 0 } };
@@ -73,8 +81,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   citedTags: new Set<string>(),
   chatResetEpoch: 0,
   initialLoaded: false,
+  activeSlug: null,
+  scrollTarget: null,
 
   setCitedTags: (tags: Set<string>) => set({ citedTags: tags }),
+  setActiveSlug: (slug: string | null) => set({ activeSlug: slug, scrollTarget: null }),
+  focusCitation: (tagSlug: string) => {
+    const slug = tagSlug.toLowerCase();
+    const docs = get().docs;
+    const matched = docs.find((d) => d.tags.some((t) => tagToSlug(t) === slug));
+    if (!matched) return;
+    set({
+      activeSlug: matched.slug,
+      scrollTarget: { tag: slug, nonce: Date.now() },
+    });
+  },
 
   loadInitialState: async () => {
     if (get().initialLoaded) return;
@@ -144,6 +165,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         citedTags: new Set<string>(),
         lastUploadCount: 0,
         chatResetEpoch: get().chatResetEpoch + 1,
+        activeSlug: null,
+        scrollTarget: null,
       });
     } catch (err) {
       set({ uploadError: err instanceof Error ? err.message : String(err) });
@@ -161,7 +184,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         method: 'DELETE',
       });
       if (!res.ok) throw new Error(`delete HTTP ${res.status}`);
-      set({ docs: get().docs.filter((d) => d.slug !== slug) });
+      set({
+        docs: get().docs.filter((d) => d.slug !== slug),
+        activeSlug: get().activeSlug === slug ? null : get().activeSlug,
+        scrollTarget: get().activeSlug === slug ? null : get().scrollTarget,
+      });
       await get().refreshGraph();
     } catch (err) {
       set({ uploadError: err instanceof Error ? err.message : String(err) });
