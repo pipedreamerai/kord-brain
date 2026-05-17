@@ -231,6 +231,7 @@ type Segment =
 function TextWithCitations({ text }: { text: string }) {
   const focusCitation = useAppStore((s) => s.focusCitation);
   const docs = useAppStore((s) => s.docs);
+  const selectedTag = useAppStore((s) => s.selectedTag);
 
   // slug → count of uploaded docs containing it.
   const docSlugCounts = useMemo(() => {
@@ -281,7 +282,11 @@ function TextWithCitations({ text }: { text: string }) {
                 ? `Open first of ${seg.docCount} docs containing ${seg.display}`
                 : `Open doc containing ${seg.display}`
             }
-            className="text-amber-200 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-900/60 rounded px-1 transition-colors cursor-pointer font-mono"
+            className={`rounded px-1 transition-colors cursor-pointer font-mono border ${
+              selectedTag === seg.slug
+                ? 'bg-amber-400 text-zinc-950 border-amber-300 ring-1 ring-amber-300'
+                : 'text-amber-200 bg-amber-950/40 hover:bg-amber-900/60 border-amber-900/60'
+            }`}
           >
             {seg.display}
           </button>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useAppStore } from '@/lib/appStore';
 import { FilesTab } from './FilesTab';
 import { GraphTab } from './GraphTab';
@@ -8,7 +8,8 @@ import { ChatPanel } from './ChatPanel';
 import { PagesTab } from './PagesTab';
 
 export function AppShell() {
-  const [rightView, setRightView] = useState<'graph' | 'pages'>('graph');
+  const rightView = useAppStore((s) => s.rightView);
+  const setRightView = useAppStore((s) => s.setRightView);
   const loadInitialState = useAppStore((s) => s.loadInitialState);
   const resetAll = useAppStore((s) => s.resetAll);
   const resetting = useAppStore((s) => s.resetting);

@@ -36,6 +36,14 @@ export type UploadedDoc = {
   payload: UploadPayload;
 };
 
+export type IngestProgress =
+  | { type: 'parse-start'; filename: string; kind: UploadKind }
+  | { type: 'parsed'; filename: string; tags: string[]; pageCount?: number }
+  | { type: 'gbrain-doc'; filename: string; slug: string }
+  | { type: 'gbrain-tag'; filename: string; tag: string; tagSlug: string; i: number; of: number };
+
+type ProgressFn = (ev: IngestProgress) => void;
+
 export const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
 const META_FILE = path.join(UPLOADS_DIR, '.meta.json');
 
@@ -154,11 +162,22 @@ ${list || '_no documents_'}
 `;
 }
 
-async function pushToGbrain(doc: UploadedDoc) {
+async function pushToGbrain(doc: UploadedDoc, onProgress?: ProgressFn) {
+  onProgress?.({ type: 'gbrain-doc', filename: doc.displayName, slug: doc.slug });
   await gbrain.putPage(doc.slug, buildDocMarkdown(doc.displayName, doc.kind, doc.tags));
   // Upsert each tag page with a mention back to this doc.
-  for (const tag of doc.tags) {
+  const total = doc.tags.length;
+  for (let i = 0; i < total; i++) {
+    const tag = doc.tags[i];
     const tagSlug = tagToSlug(tag);
+    onProgress?.({
+      type: 'gbrain-tag',
+      filename: doc.displayName,
+      tag,
+      tagSlug,
+      i: i + 1,
+      of: total,
+    });
     // Read existing mentions if any so we don't clobber.
     let mentions: string[] = [];
     const existing = await gbrain.getPage(tagSlug);
@@ -197,7 +216,11 @@ export async function getAllDocs(): Promise<UploadedDoc[]> {
   return [...c.values()].sort((a, b) => a.uploadedAt - b.uploadedAt);
 }
 
-export async function ingestUpload(filename: string, buf: Buffer): Promise<UploadedDoc> {
+export async function ingestUpload(
+  filename: string,
+  buf: Buffer,
+  onProgress?: ProgressFn,
+): Promise<UploadedDoc> {
   const kind = kindFromFilename(filename);
   if (!kind) throw new Error(`Unsupported file type: ${filename}`);
 
@@ -207,7 +230,15 @@ export async function ingestUpload(filename: string, buf: Buffer): Promise<Uploa
 
   const baseSlug = slugFromFilename(safeName);
   const slug = await uniqueSlug(baseSlug);
+  onProgress?.({ type: 'parse-start', filename, kind });
   const { payload, tags } = await parseFile(kind, buf, filename);
+  const pageCount =
+    payload.kind === 'pdf'
+      ? payload.pages.length
+      : payload.kind === 'xlsx'
+        ? payload.sheets.length
+        : undefined;
+  onProgress?.({ type: 'parsed', filename, tags, pageCount });
 
   const doc: UploadedDoc = {
     slug,
@@ -220,7 +251,7 @@ export async function ingestUpload(filename: string, buf: Buffer): Promise<Uploa
     payload,
   };
 
-  await pushToGbrain(doc);
+  await pushToGbrain(doc, onProgress);
 
   const c = await loadCache();
   c.set(slug, doc);

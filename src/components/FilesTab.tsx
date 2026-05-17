@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useAppStore, type UploadedDoc } from '@/lib/appStore';
+import { useAppStore, type UploadedDoc, type UploadProgress } from '@/lib/appStore';
 import { PdfViewer, type PdfBboxEntry } from './PdfViewer';
 import { DocxViewer } from './DocxViewer';
 import { XlsxViewer } from './XlsxViewer';
@@ -11,6 +11,7 @@ const FILES_BAR_KEY = 'kord:filesBarCollapsed';
 export function FilesTab() {
   const docs = useAppStore((s) => s.docs);
   const uploading = useAppStore((s) => s.uploading);
+  const uploadProgress = useAppStore((s) => s.uploadProgress);
   const uploadError = useAppStore((s) => s.uploadError);
   const uploadFiles = useAppStore((s) => s.uploadFiles);
   const deleteDoc = useAppStore((s) => s.deleteDoc);
@@ -18,6 +19,8 @@ export function FilesTab() {
   const activeSlug = useAppStore((s) => s.activeSlug);
   const setActiveSlug = useAppStore((s) => s.setActiveSlug);
   const scrollTarget = useAppStore((s) => s.scrollTarget);
+  const selectedTag = useAppStore((s) => s.selectedTag);
+  const selectTag = useAppStore((s) => s.selectTag);
   const [collapsed, setCollapsed] = useState<boolean>(false);
   const [fullscreen, setFullscreen] = useState<boolean>(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -60,7 +63,7 @@ export function FilesTab() {
   }
 
   return (
-    <div className="flex h-full bg-zinc-950 text-zinc-100">
+    <div className="flex flex-col h-full bg-zinc-950 text-zinc-100">
       <input
         ref={inputRef}
         type="file"
@@ -70,6 +73,9 @@ export function FilesTab() {
         onChange={onPick}
       />
 
+      {uploading && <UploadProgressBanner progress={uploadProgress} />}
+
+      <div className="flex flex-1 min-h-0">
       {empty ? (
         <EmptyState onUpload={openPicker} uploading={uploading} error={uploadError} />
       ) : (
@@ -114,7 +120,9 @@ export function FilesTab() {
                     doc={d}
                     active={d.slug === activeSlug}
                     citedTags={citedTags}
+                    selectedTag={selectedTag}
                     onClick={() => setActiveSlug(d.slug)}
+                    onTagClick={(tag) => selectTag(slugify(tag))}
                     onDelete={() => {
                       if (activeSlug === d.slug) setActiveSlug(null);
                       void deleteDoc(d.slug);
@@ -182,6 +190,48 @@ export function FilesTab() {
           </main>
         </>
       )}
+      </div>
+    </div>
+  );
+}
+
+function UploadProgressBanner({ progress }: { progress: UploadProgress }) {
+  const overall = progress.total > 0
+    ? Math.min(1, (progress.doneFiles + progress.currentFraction) / progress.total)
+    : 0;
+  const recent = progress.notes.slice(-5);
+  return (
+    <div className="shrink-0 border-b border-zinc-800 bg-zinc-900/70 px-3 py-2">
+      <div className="flex items-baseline gap-2 mb-1">
+        <span className="text-[10px] uppercase tracking-[0.18em] text-blue-300 font-mono">
+          Uploading {Math.min(progress.currentIndex + 1, progress.total || 1)} / {progress.total || '?'}
+        </span>
+        <span className="text-[12px] text-zinc-100 truncate flex-1">
+          {progress.currentFile ?? '…'}
+        </span>
+        <span className="text-[10px] font-mono text-zinc-400 tabular-nums">
+          {Math.round(overall * 100)}%
+        </span>
+      </div>
+      <div className="h-1.5 w-full rounded bg-zinc-800 overflow-hidden">
+        <div
+          className="h-full bg-blue-500 transition-[width] duration-200 ease-out"
+          style={{ width: `${overall * 100}%` }}
+        />
+      </div>
+      <div className="mt-1 flex items-baseline gap-2">
+        <span className="text-[10px] font-mono text-zinc-500 shrink-0">step:</span>
+        <span className="text-[10px] font-mono text-zinc-300 truncate">
+          {progress.currentStep ?? '…'}
+        </span>
+      </div>
+      {recent.length > 0 && (
+        <div className="mt-1.5 font-mono text-[10px] leading-snug text-zinc-500 max-h-24 overflow-hidden">
+          {recent.map((n) => (
+            <div key={n.id} className="truncate">{n.text}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -190,13 +240,17 @@ function FileRow({
   doc,
   active,
   citedTags,
+  selectedTag,
   onClick,
+  onTagClick,
   onDelete,
 }: {
   doc: UploadedDoc;
   active: boolean;
   citedTags: Set<string>;
+  selectedTag: string | null;
   onClick: () => void;
+  onTagClick: (tag: string) => void;
   onDelete: () => void;
 }) {
   const citedCount = doc.tags.reduce(
@@ -253,18 +307,30 @@ function FileRow({
       </div>
       {doc.tags.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-0.5">
-          {doc.tags.slice(0, 8).map((t) => (
-            <span
-              key={t}
-              className={`text-[9px] rounded px-1 font-mono ${
-                citedTags.has(slugify(t))
-                  ? 'bg-amber-900/60 text-amber-200'
-                  : 'bg-zinc-800 text-zinc-400'
-              }`}
-            >
-              {t}
-            </span>
-          ))}
+          {doc.tags.slice(0, 8).map((t) => {
+            const slug = slugify(t);
+            const isSelected = selectedTag === slug;
+            const isCited = citedTags.has(slug);
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTagClick(t);
+                }}
+                className={`text-[9px] rounded px-1 font-mono cursor-pointer transition-colors ${
+                  isSelected
+                    ? 'bg-amber-400 text-zinc-950 ring-1 ring-amber-300'
+                    : isCited
+                      ? 'bg-amber-900/60 text-amber-200 hover:bg-amber-800/70'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                }`}
+              >
+                {t}
+              </button>
+            );
+          })}
           {doc.tags.length > 8 && (
             <span className="text-[9px] text-zinc-600">+{doc.tags.length - 8}</span>
           )}

@@ -21,6 +21,10 @@ const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false 
 type Props = {
   nodes: BrainNode[];
   edges: BrainEdge[];
+  /** Currently selected tag slug — node renders with extra emphasis. */
+  selectedSlug?: string | null;
+  /** Fired when a node is clicked. Camera zoom still runs regardless. */
+  onSelectNode?: (slug: string, kind: string) => void;
 };
 
 type GNode = BrainNode & {
@@ -28,6 +32,7 @@ type GNode = BrainNode & {
   label: string;
   color: string;
   size: number;
+  selected: boolean;
   fx?: number;
   fy?: number;
   fz?: number;
@@ -75,7 +80,7 @@ function sizeFor(kind: string): number {
   return 4;
 }
 
-export function FullGbrainGraph({ nodes, edges }: Props) {
+export function FullGbrainGraph({ nodes, edges, selectedSlug, onSelectNode }: Props) {
   const fgRef = useRef<ForceGraphHandle | undefined>(undefined);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -106,6 +111,7 @@ export function FullGbrainGraph({ nodes, edges }: Props) {
       label: n.title || n.slug,
       color: colorFor(n.kind),
       size: sizeFor(n.kind),
+      selected: !!selectedSlug && n.slug === selectedSlug,
       fx: p.x,
       fy: p.y,
       fz: p.z,
@@ -123,7 +129,7 @@ export function FullGbrainGraph({ nodes, edges }: Props) {
       .map((e) => ({ source: e.from, target: e.to, kind: e.kind }));
 
     return { nodes: gnodes, links: glinks };
-  }, [nodes, edges]);
+  }, [nodes, edges, selectedSlug]);
 
   useEffect(() => {
     const fg = fgRef.current;
@@ -170,22 +176,28 @@ export function FullGbrainGraph({ nodes, edges }: Props) {
           nodeThreeObject={(n: unknown) => {
             const node = n as GNode;
             const group = new THREE.Group();
-            const geo = new THREE.SphereGeometry(node.size, 24, 24);
+            const sizeMul = node.selected ? 1.6 : 1;
+            const geo = new THREE.SphereGeometry(node.size * sizeMul, 24, 24);
             const mat = new THREE.MeshStandardMaterial({
               color: node.color,
               emissive: node.color,
-              emissiveIntensity: 0.45,
+              emissiveIntensity: node.selected ? 1.2 : 0.45,
               roughness: 0.35,
               metalness: 0.15,
             });
             group.add(new THREE.Mesh(geo, mat));
 
             const glowMat = new THREE.MeshBasicMaterial({
-              color: node.color,
+              color: node.selected ? '#ffffff' : node.color,
               transparent: true,
-              opacity: 0.18,
+              opacity: node.selected ? 0.35 : 0.18,
             });
-            group.add(new THREE.Mesh(new THREE.SphereGeometry(node.size * 1.8, 16, 16), glowMat));
+            group.add(
+              new THREE.Mesh(
+                new THREE.SphereGeometry(node.size * (node.selected ? 3 : 1.8), 16, 16),
+                glowMat,
+              ),
+            );
 
             return group;
           }}
@@ -196,6 +208,7 @@ export function FullGbrainGraph({ nodes, edges }: Props) {
           onNodeHover={(n: unknown) => setHovered((n as GNode | null) ?? null)}
           onNodeClick={(n: unknown) => {
             const node = n as GNode;
+            onSelectNode?.(node.slug, node.kind);
             const fg = fgRef.current;
             if (!fg) return;
             const distance = 80;
