@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '@/lib/appStore';
 import { FilesTab } from './FilesTab';
 import { GraphTab } from './GraphTab';
 import { ChatPanel } from './ChatPanel';
+import { PagesTab } from './PagesTab';
 
 export function AppShell() {
+  const [rightView, setRightView] = useState<'graph' | 'pages'>('graph');
   const loadInitialState = useAppStore((s) => s.loadInitialState);
   const resetAll = useAppStore((s) => s.resetAll);
   const resetting = useAppStore((s) => s.resetting);
@@ -63,8 +65,25 @@ export function AppShell() {
           <div className="flex-1 min-w-0">
             <FilesTab />
           </div>
-          <div className="w-[28%] min-w-[300px] border-l border-zinc-800">
-            <GraphTab />
+          <div className="w-[28%] min-w-[300px] border-l border-zinc-800 flex flex-col">
+            <div className="shrink-0 flex border-b border-zinc-800 bg-zinc-950">
+              {(['graph', 'pages'] as const).map((view) => (
+                <button
+                  key={view}
+                  onClick={() => setRightView(view)}
+                  className={`flex-1 px-3 py-2 text-[10px] font-mono uppercase tracking-wide ${
+                    rightView === view
+                      ? 'bg-zinc-900 text-zinc-100'
+                      : 'text-zinc-500 hover:bg-zinc-900/60 hover:text-zinc-300'
+                  }`}
+                >
+                  {view}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1 min-h-0">
+              {rightView === 'graph' ? <GraphTab /> : <PagesTab />}
+            </div>
           </div>
         </div>
         <ChatPanel />
