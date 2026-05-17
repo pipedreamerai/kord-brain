@@ -3,12 +3,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '@/lib/appStore';
 
-type GbrainPage = {
+type PageDetail = {
   slug: string;
   title: string;
   type: string;
   markdown: string;
 };
+
+type FetchState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'ready'; data: PageDetail }
+  | { status: 'error' };
 
 function typeClass(type: string) {
   if (type === 'document') return 'border-blue-500/30 bg-blue-950/20 text-blue-200';
@@ -18,37 +24,16 @@ function typeClass(type: string) {
 
 export function PagesTab() {
   const graph = useAppStore((s) => s.graph);
-  const [pages, setPages] = useState<GbrainPage[]>([]);
-  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [openSlug, setOpenSlug] = useState<string | null>(null);
+  const [cache, setCache] = useState<Record<string, FetchState>>({});
 
-  useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    fetch('/api/pages')
-      .then((res) => (res.ok ? res.json() : { pages: [] }))
-      .then((data: { pages?: GbrainPage[] }) => {
-        if (!alive) return;
-        const nextPages = data.pages ?? [];
-        setPages(nextPages);
-        setSelectedSlug((current) => (
-          current && nextPages.some((page) => page.slug === current)
-            ? current
-            : nextPages[0]?.slug ?? null
-        ));
-      })
-      .catch(() => {
-        if (alive) setPages([]);
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [graph.nodes.length, graph.edges.length, graph.stats.pages, graph.stats.links]);
+  const items = useMemo(() => {
+    return [...graph.nodes].sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === 'document' ? -1 : 1;
+      return a.title.localeCompare(b.title);
+    });
+  }, [graph.nodes]);
 
-  const selected = pages.find((page) => page.slug === selectedSlug) ?? pages[0];
   const linkCounts = useMemo(() => {
     const counts = new Map<string, { out: number; in: number }>();
     for (const edge of graph.edges) {
@@ -62,53 +47,111 @@ export function PagesTab() {
     return counts;
   }, [graph.edges]);
 
+  // If the currently open slug disappears from the graph (after reset/delete),
+  // collapse it. Don't auto-open anything — accordion starts closed.
+  useEffect(() => {
+    if (openSlug && !items.some((n) => n.slug === openSlug)) {
+      setOpenSlug(null);
+    }
+  }, [items, openSlug]);
+
+  // Drop cached markdown for slugs no longer in the graph so a re-upload
+  // re-fetches fresh content.
+  useEffect(() => {
+    setCache((prev) => {
+      const alive = new Set(items.map((n) => n.slug));
+      let changed = false;
+      const next: Record<string, FetchState> = {};
+      for (const [slug, state] of Object.entries(prev)) {
+        if (alive.has(slug)) next[slug] = state;
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [items]);
+
+  const toggle = (slug: string) => {
+    if (openSlug === slug) {
+      setOpenSlug(null);
+      return;
+    }
+    setOpenSlug(slug);
+    const existing = cache[slug];
+    if (existing && (existing.status === 'ready' || existing.status === 'loading')) return;
+
+    setCache((prev) => ({ ...prev, [slug]: { status: 'loading' } }));
+    fetch(`/api/pages?slug=${encodeURIComponent(slug)}`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { page: PageDetail | null };
+        if (!data.page) throw new Error('not found');
+        setCache((prev) => ({ ...prev, [slug]: { status: 'ready', data: data.page! } }));
+      })
+      .catch(() => {
+        setCache((prev) => ({ ...prev, [slug]: { status: 'error' } }));
+      });
+  };
+
   return (
     <div className="h-full bg-zinc-950 text-zinc-100 flex flex-col">
-      {pages.length === 0 ? (
+      <div className="shrink-0 px-3 py-2 border-b border-zinc-800">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">gbrain pages</div>
+        <div className="text-[11px] font-mono text-zinc-400">
+          {items.length} page{items.length === 1 ? '' : 's'}
+        </div>
+      </div>
+
+      {items.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-center px-6">
-          <p className="text-[12px] text-zinc-600 font-mono">
-            {loading ? 'loading pages…' : 'no gbrain pages yet'}
-          </p>
+          <p className="text-[12px] text-zinc-600 font-mono">no gbrain pages yet</p>
         </div>
       ) : (
-        <div className="flex-1 min-h-0 grid grid-rows-[minmax(150px,42%)_1fr]">
-          <div className="overflow-auto border-b border-zinc-800 p-2 space-y-2">
-            {pages.map((page) => {
-              const counts = linkCounts.get(page.slug) ?? { out: 0, in: 0 };
-              const active = page.slug === selected?.slug;
-              return (
+        <div className="flex-1 min-h-0 overflow-auto p-2 space-y-1.5">
+          {items.map((node) => {
+            const counts = linkCounts.get(node.slug) ?? { out: 0, in: 0 };
+            const open = node.slug === openSlug;
+            const state = cache[node.slug];
+            return (
+              <div
+                key={node.slug}
+                className={`rounded border ${open ? 'border-zinc-400' : 'border-zinc-800'}`}
+              >
                 <button
-                  key={page.slug}
-                  onClick={() => setSelectedSlug(page.slug)}
-                  className={`w-full text-left rounded border px-3 py-2 transition ${active ? 'border-zinc-400 bg-zinc-900' : 'border-zinc-800 bg-zinc-950 hover:bg-zinc-900/70'
-                    }`}
+                  onClick={() => toggle(node.slug)}
+                  className={`w-full text-left px-3 py-2 transition ${
+                    open ? 'bg-zinc-900' : 'bg-zinc-950 hover:bg-zinc-900/70'
+                  }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-mono uppercase ${typeClass(page.type)}`}>
-                      {page.type}
+                    <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-mono uppercase ${typeClass(node.kind)}`}>
+                      {node.kind}
                     </span>
-                    <span className="truncate text-[12px] text-zinc-100">{page.title}</span>
+                    <span className="truncate text-[12px] text-zinc-100">{node.title}</span>
+                    <span className={`ml-auto shrink-0 text-[10px] text-zinc-500 transition-transform ${open ? 'rotate-90' : ''}`}>
+                      ▸
+                    </span>
                   </div>
                   <div className="mt-1 font-mono text-[10px] text-zinc-500">
-                    {page.slug} · out {counts.out} · in {counts.in}
+                    {node.slug} · out {counts.out} · in {counts.in}
                   </div>
                 </button>
-              );
-            })}
-          </div>
 
-          <div className="min-h-0 overflow-auto p-3">
-            <div className="mb-2 flex items-center gap-2">
-              <span className={`rounded border px-1.5 py-0.5 text-[9px] font-mono uppercase ${typeClass(selected.type)}`}>
-                {selected.type}
-              </span>
-              <h2 className="text-sm font-semibold truncate">{selected.title}</h2>
-            </div>
-            <div className="mb-3 font-mono text-[10px] text-zinc-500">{selected.slug}</div>
-            <pre className="whitespace-pre-wrap rounded border border-zinc-800 bg-black/30 p-3 text-[11px] leading-relaxed text-zinc-300">
-              {selected.markdown}
-            </pre>
-          </div>
+                {open && (
+                  <div className="border-t border-zinc-800 p-3">
+                    {!state || state.status === 'loading' || state.status === 'idle' ? (
+                      <div className="font-mono text-[11px] text-zinc-500">loading…</div>
+                    ) : state.status === 'error' ? (
+                      <div className="font-mono text-[11px] text-red-400">failed to load page</div>
+                    ) : (
+                      <pre className="whitespace-pre-wrap rounded border border-zinc-800 bg-black/30 p-3 text-[11px] leading-relaxed text-zinc-300">
+                        {state.data.markdown}
+                      </pre>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
